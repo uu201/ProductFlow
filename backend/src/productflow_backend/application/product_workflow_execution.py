@@ -19,27 +19,27 @@ from productflow_backend.application.admission import ensure_generation_capacity
 from productflow_backend.application.contracts import PosterGenerationInput, ProductInput
 from productflow_backend.application.image_generation_core import build_stored_image_reference_payload
 from productflow_backend.application.product_workflow_artifacts import (
-    _copy_node_output,
-    _create_context_copy_set,
-    _fill_reference_node,
-    _GeneratedWorkflowImage,
-    _image_asset_output,
+    GeneratedWorkflowImage,
+    copy_node_output,
+    create_context_copy_set,
+    fill_reference_node,
+    image_asset_output,
 )
 from productflow_backend.application.product_workflow_context import (
-    _collect_incoming_context,
-    _downstream_reference_nodes,
-    _effective_product_context,
-    _find_source_asset,
-    _image_instruction_with_context,
-    _image_size_from_config,
-    _image_tool_options_from_config,
-    _instruction_with_upstream_text,
-    _optional_config_text,
-    _poster_kind_from_config,
-    _product_context_values,
-    _reference_assets_for_image_generation,
-    _reference_image_inputs_for_copy,
-    _source_asset_ids_from_config,
+    collect_incoming_context,
+    downstream_reference_nodes,
+    effective_product_context,
+    find_source_asset,
+    image_instruction_with_context,
+    image_size_from_config,
+    image_tool_options_from_config,
+    instruction_with_upstream_text,
+    optional_config_text,
+    poster_kind_from_config,
+    product_context_values,
+    reference_assets_for_image_generation,
+    reference_image_inputs_for_copy,
+    source_asset_ids_from_config,
 )
 from productflow_backend.application.product_workflow_dependencies import (
     PosterRendererFactory,
@@ -541,7 +541,7 @@ def _node_has_reusable_output(
             )
         poster_ids = output.get("poster_variant_ids")
         filled_ids = output.get("filled_source_asset_ids")
-        source_asset_ids = _source_asset_ids_from_config(output)
+        source_asset_ids = source_asset_ids_from_config(output)
         if isinstance(filled_ids, list):
             source_asset_ids.extend(item for item in filled_ids if isinstance(item, str))
         has_source_assets = _valid_source_asset_ids(session, workflow.product_id, source_asset_ids)
@@ -578,8 +578,8 @@ def _node_has_valid_reference_assets(session: Session, product_id: str, node: Wo
     asset_ids = list(
         dict.fromkeys(
             [
-                *_source_asset_ids_from_config(node.output_json or {}),
-                *_source_asset_ids_from_config(node.config_json or {}),
+                *source_asset_ids_from_config(node.output_json or {}),
+                *source_asset_ids_from_config(node.config_json or {}),
             ]
         )
     )
@@ -629,8 +629,8 @@ def _execute_node(
 
 
 def _execute_product_context(product: Product, node: WorkflowNode) -> dict[str, Any]:
-    context = _product_context_values(product, node)
-    source = _find_source_asset(product)
+    context = product_context_values(product, node)
+    source = find_source_asset(product)
     return {
         "product_id": product.id,
         "name": context["name"],
@@ -643,16 +643,16 @@ def _execute_product_context(product: Product, node: WorkflowNode) -> dict[str, 
 
 
 def _execute_reference_image(session: Session, *, workflow: ProductWorkflow, node: WorkflowNode) -> dict[str, Any]:
-    asset_ids = _source_asset_ids_from_config(node.config_json)
+    asset_ids = source_asset_ids_from_config(node.config_json)
     assets = WorkflowQueryService(session).source_assets_by_ids(asset_ids)
     assets = [asset for asset in assets if asset.product_id == workflow.product_id]
     if not assets:
-        return _image_asset_output([], summary="参考图为空")
-    return _image_asset_output(
+        return image_asset_output([], summary="参考图为空")
+    return image_asset_output(
         assets,
         summary=f"参考图 {len(assets)} 张",
-        role=_optional_config_text(node.config_json, "role"),
-        label=_optional_config_text(node.config_json, "label") or node.title,
+        role=optional_config_text(node.config_json, "role"),
+        label=optional_config_text(node.config_json, "label") or node.title,
     )
 
 
@@ -665,17 +665,17 @@ def _execute_copy_generation(
 ) -> dict[str, Any]:
     dependencies = dependencies or default_workflow_execution_dependencies()
     product = workflow.product
-    product_context = _effective_product_context(workflow, node.id)
+    product_context = effective_product_context(workflow, node.id)
     has_product_context = any(value is not None for value in product_context.values())
     existing_output = node.output_json or {}
     existing_copy_set_id = existing_output.get("copy_set_id")
     if existing_output.get("manual_edit") is True and isinstance(existing_copy_set_id, str):
         copy_set = session.get(CopySet, existing_copy_set_id)
         if copy_set is not None and copy_set.product_id == product.id:
-            return _copy_node_output(copy_set, creative_brief_id=copy_set.creative_brief_id, manual_edit=True)
+            return copy_node_output(copy_set, creative_brief_id=copy_set.creative_brief_id, manual_edit=True)
 
     storage = LocalStorage()
-    source = _find_source_asset(product) if has_product_context else None
+    source = find_source_asset(product) if has_product_context else None
     product_input = ProductInput(
         name=product_context["name"] or "自由创作",
         category=product_context["category"],
@@ -683,10 +683,10 @@ def _execute_copy_generation(
         source_note=product_context["source_note"],
         image_path=str(storage.resolve(source.storage_path)) if source is not None else "",
     )
-    incoming_context = _collect_incoming_context(workflow, node.id)
-    reference_images = _reference_image_inputs_for_copy(session, workflow=workflow, node_id=node.id, storage=storage)
-    instruction = _instruction_with_upstream_text(
-        _optional_config_text(node.config_json, "instruction"),
+    incoming_context = collect_incoming_context(workflow, node.id)
+    reference_images = reference_image_inputs_for_copy(session, workflow=workflow, node_id=node.id, storage=storage)
+    instruction = instruction_with_upstream_text(
+        optional_config_text(node.config_json, "instruction"),
         incoming_context,
     )
     provider = dependencies.text_provider()
@@ -726,7 +726,7 @@ def _execute_copy_generation(
     session.add(copy_set)
     session.flush()
     product.updated_at = now_utc()
-    output = _copy_node_output(copy_set, creative_brief_id=brief.id)
+    output = copy_node_output(copy_set, creative_brief_id=brief.id)
     output["instruction"] = instruction
     output["context_summary"] = {
         "product_context": product_context,
@@ -746,22 +746,22 @@ def _execute_image_generation(
 ) -> dict[str, Any]:
     dependencies = dependencies or default_workflow_execution_dependencies()
     product = workflow.product
-    incoming_context = _collect_incoming_context(workflow, node.id, include_transitive_product_context=True)
-    product_context = _effective_product_context(workflow, node.id, include_transitive=True)
-    downstream_reference_nodes = _downstream_reference_nodes(workflow, node.id)
-    if not downstream_reference_nodes:
+    incoming_context = collect_incoming_context(workflow, node.id, include_transitive_product_context=True)
+    product_context = effective_product_context(workflow, node.id, include_transitive=True)
+    downstream_nodes = downstream_reference_nodes(workflow, node.id)
+    if not downstream_nodes:
         raise BusinessValidationError("请先把生图节点连接到至少一个图片/参考图节点，再运行图片生成")
 
-    linked_copy_set_id = _optional_config_text(node.config_json, "copy_set_id") or incoming_context.copy_set_id
+    linked_copy_set_id = optional_config_text(node.config_json, "copy_set_id") or incoming_context.copy_set_id
     copy_set = session.get(CopySet, linked_copy_set_id) if linked_copy_set_id else None
     has_linked_copy_input = (
         linked_copy_set_id is not None and copy_set is not None and copy_set.product_id == product.id
     )
     if copy_set is None or copy_set.product_id != product.id:
-        copy_set = _create_context_copy_set(session, product=product, product_context=product_context, node=node)
+        copy_set = create_context_copy_set(session, product=product, product_context=product_context, node=node)
 
     storage = LocalStorage()
-    reference_assets = _reference_assets_for_image_generation(
+    reference_assets = reference_assets_for_image_generation(
         session,
         workflow,
         incoming_context.image_asset_ids,
@@ -777,9 +777,9 @@ def _execute_image_generation(
         category=product_context["category"],
         price=product_context["price"],
         source_note=product_context["source_note"],
-        instruction=_image_instruction_with_context(node, incoming_context.text_contexts),
-        image_size=_image_size_from_config(node.config_json),
-        tool_options=_image_tool_options_from_config(node.config_json),
+        instruction=image_instruction_with_context(node, incoming_context.text_contexts),
+        image_size=image_size_from_config(node.config_json),
+        tool_options=image_tool_options_from_config(node.config_json),
         title=copy_set.title,
         selling_points=copy_set.selling_points,
         poster_headline=copy_set.poster_headline,
@@ -791,22 +791,22 @@ def _execute_image_generation(
     filled_source_asset_ids: list[str] = []
     filled_reference_node_ids: list[str] = []
     settings = get_runtime_settings()
-    kind = _poster_kind_from_config(node.config_json)
+    kind = poster_kind_from_config(node.config_json)
     image_providers = (
-        [dependencies.image_provider() for _ in downstream_reference_nodes]
+        [dependencies.image_provider() for _ in downstream_nodes]
         if settings.poster_generation_mode == "generated"
         else None
     )
     generated_images = _generate_workflow_images_concurrently(
         render_input=render_input,
         kind=kind,
-        target_count=len(downstream_reference_nodes),
+        target_count=len(downstream_nodes),
         poster_generation_mode=settings.poster_generation_mode,
         poster_font_path=settings.poster_font_path,
         image_providers=image_providers,
         renderer_factory=dependencies.poster_renderer,
     )
-    for generated_image, target_node in zip(generated_images, downstream_reference_nodes, strict=True):
+    for generated_image, target_node in zip(generated_images, downstream_nodes, strict=True):
         content = generated_image.content
         mime_type = generated_image.mime_type
         relative_path = storage.save_generated_image(
@@ -843,16 +843,16 @@ def _execute_image_generation(
         session.flush()
         filled_source_asset_ids.append(asset.id)
         filled_reference_node_ids.append(target_node.id)
-        _fill_reference_node(target_node, asset, source_poster_variant_id=poster.id)
+        fill_reference_node(target_node, asset, source_poster_variant_id=poster.id)
     product.updated_at = now_utc()
     return {
         "copy_set_id": copy_set.id,
         "generated_poster_variant_ids": poster_ids,
         "filled_source_asset_ids": filled_source_asset_ids,
         "filled_reference_node_ids": filled_reference_node_ids,
-        "target_count": len(downstream_reference_nodes),
-        "size": _image_size_from_config(node.config_json),
-        "instruction": _optional_config_text(node.config_json, "instruction"),
+        "target_count": len(downstream_nodes),
+        "size": image_size_from_config(node.config_json),
+        "instruction": optional_config_text(node.config_json, "instruction"),
         "context_summary": {
             "product_context": product_context,
             "copy_set_id": copy_set.id,
@@ -875,13 +875,13 @@ def _generate_workflow_images_concurrently(
     poster_font_path: Path,
     image_providers: list[ImageProvider] | None,
     renderer_factory: PosterRendererFactory | None = None,
-) -> list[_GeneratedWorkflowImage]:
+) -> list[GeneratedWorkflowImage]:
     if target_count <= 0:
         return []
     dependencies = default_workflow_execution_dependencies()
     renderer_factory = renderer_factory or dependencies.poster_renderer
 
-    def generate_one(target_index: int) -> _GeneratedWorkflowImage:
+    def generate_one(target_index: int) -> GeneratedWorkflowImage:
         if poster_generation_mode == "generated":
             if image_providers is None:
                 raise RuntimeError("图片生成供应商未初始化")
@@ -905,7 +905,7 @@ def _generate_workflow_images_concurrently(
                     type(exc).__name__,
                 )
                 raise WorkflowImageGenerationProviderError(WORKFLOW_IMAGE_GENERATION_FAILURE) from exc
-            return _GeneratedWorkflowImage(
+            return GeneratedWorkflowImage(
                 target_index=target_index,
                 content=generated_image.bytes_data,
                 width=generated_image.width,
@@ -915,7 +915,7 @@ def _generate_workflow_images_concurrently(
             )
 
         renderer = renderer_factory(poster_font_path)
-        return _GeneratedWorkflowImage(
+        return GeneratedWorkflowImage(
             target_index=target_index,
             content=renderer.render(render_input, kind),
             width=1080,
@@ -936,7 +936,7 @@ def _generate_workflow_images_concurrently(
         return [generate_one(1)]
     executor = ThreadPoolExecutor(max_workers=target_count)
     futures = {executor.submit(generate_one, target_index): target_index for target_index in range(1, target_count + 1)}
-    results: dict[int, _GeneratedWorkflowImage] = {}
+    results: dict[int, GeneratedWorkflowImage] = {}
     try:
         timeout = (
             _workflow_image_generation_provider_timeout_seconds()

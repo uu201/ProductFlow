@@ -9,11 +9,11 @@ from sqlalchemy.orm import Session
 from productflow_backend.application import product_workflow_graph
 from productflow_backend.application.image_generation_core import normalize_image_generation_tool_options
 from productflow_backend.application.product_workflow_artifacts import (
-    _fill_reference_node,
-    _image_asset_output,
-    _source_asset_for_poster_variant,
+    fill_reference_node,
+    image_asset_output,
+    source_asset_for_poster_variant,
 )
-from productflow_backend.application.product_workflow_context import _image_size_from_config, _optional_config_text
+from productflow_backend.application.product_workflow_context import image_size_from_config, optional_config_text
 from productflow_backend.application.time import now_utc
 from productflow_backend.application.use_cases import update_copy_set
 from productflow_backend.domain.durable_generation_tasks import WORKFLOW_RUN_GENERATION_TASK_CONTRACT
@@ -51,7 +51,7 @@ def _active_workflow_run(workflow: ProductWorkflow) -> WorkflowRun | None:
 def _normalize_node_config(node_type: WorkflowNodeType, config_json: dict[str, Any] | None) -> dict[str, Any]:
     config = dict(config_json or {})
     if node_type == WorkflowNodeType.IMAGE_GENERATION:
-        normalized_size = _image_size_from_config(config)
+        normalized_size = image_size_from_config(config)
         if normalized_size is not None:
             config["size"] = normalized_size
         if "tool_options" in config:
@@ -247,11 +247,11 @@ def upload_workflow_node_image(
     config["source_asset_ids"] = [asset.id]
     config.pop("source_poster_variant_id", None)
     node.config_json = config
-    node.output_json = _image_asset_output(
+    node.output_json = image_asset_output(
         [asset],
         summary="已替换参考图",
-        role=_optional_config_text(config, "role"),
-        label=_optional_config_text(config, "label"),
+        role=optional_config_text(config, "role"),
+        label=optional_config_text(config, "label"),
     )
     node.status = WorkflowNodeStatus.SUCCEEDED
     node.failure_reason = None
@@ -300,7 +300,7 @@ def bind_workflow_node_image(
         if poster is None or poster.product_id != workflow.product_id:
             raise NotFoundError("海报不存在")
         source_poster_variant_id = poster.id
-        asset = _source_asset_for_poster_variant(session, workflow=workflow, poster_variant_id=poster.id)
+        asset = source_asset_for_poster_variant(session, workflow=workflow, poster_variant_id=poster.id)
         if asset is None:
             storage = storage or LocalStorage()
             try:
@@ -320,7 +320,7 @@ def bind_workflow_node_image(
             session.add(asset)
             session.flush()
 
-    _fill_reference_node(node, asset, source_poster_variant_id=source_poster_variant_id)
+    fill_reference_node(node, asset, source_poster_variant_id=source_poster_variant_id)
     workflow.updated_at = now_utc()
     workflow.product.updated_at = now_utc()
     session.commit()

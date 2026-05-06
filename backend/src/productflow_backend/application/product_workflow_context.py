@@ -28,11 +28,11 @@ from productflow_backend.infrastructure.db.models import (
 from productflow_backend.infrastructure.storage import LocalStorage
 
 
-def _find_source_asset(product: Product) -> SourceAsset | None:
+def find_source_asset(product: Product) -> SourceAsset | None:
     return next((asset for asset in product.source_assets if asset.kind == SourceAssetKind.ORIGINAL_IMAGE), None)
 
 
-def _product_context_values(product: Product, node: WorkflowNode | None = None) -> dict[str, str | None]:
+def product_context_values(product: Product, node: WorkflowNode | None = None) -> dict[str, str | None]:
     config = node.config_json if node is not None else {}
     return {
         "name": _configured_text(config, "name", fallback=product.name) or product.name,
@@ -82,7 +82,7 @@ def _upstream_nodes_of_type(
     return matched
 
 
-def _effective_product_context(
+def effective_product_context(
     workflow: ProductWorkflow,
     target_node_id: str,
     *,
@@ -101,7 +101,7 @@ def _effective_product_context(
         return _empty_product_context()
 
     product = workflow.product
-    fallback_context = _product_context_values(product)
+    fallback_context = product_context_values(product)
     node = sorted(incoming_context_nodes, key=lambda item: item.last_run_at or item.updated_at, reverse=True)[0]
     output = node.output_json or {}
     return {
@@ -146,7 +146,7 @@ def _output_text(output: dict[str, Any], key: str, *, fallback: str | None = Non
     return fallback
 
 
-def _source_asset_ids_from_config(config: dict[str, Any]) -> list[str]:
+def source_asset_ids_from_config(config: dict[str, Any]) -> list[str]:
     raw = config.get("source_asset_ids")
     if isinstance(raw, str):
         return [raw]
@@ -156,7 +156,7 @@ def _source_asset_ids_from_config(config: dict[str, Any]) -> list[str]:
     return [single] if isinstance(single, str) else []
 
 
-def _optional_config_text(config: dict[str, Any], key: str) -> str | None:
+def optional_config_text(config: dict[str, Any], key: str) -> str | None:
     value = config.get(key)
     if not isinstance(value, str):
         return None
@@ -164,7 +164,7 @@ def _optional_config_text(config: dict[str, Any], key: str) -> str | None:
     return normalized or None
 
 
-def _poster_kind_from_config(config: dict[str, Any]) -> PosterKind:
+def poster_kind_from_config(config: dict[str, Any]) -> PosterKind:
     raw = config.get("poster_kind")
     if raw is None:
         return PosterKind.MAIN_IMAGE
@@ -174,21 +174,21 @@ def _poster_kind_from_config(config: dict[str, Any]) -> PosterKind:
         raise BusinessValidationError("生图节点包含不支持的图片类型") from exc
 
 
-def _image_size_from_config(config: dict[str, Any]) -> str | None:
+def image_size_from_config(config: dict[str, Any]) -> str | None:
     raw = config.get("size")
     if raw is None or (isinstance(raw, str) and not raw.strip()):
         return None
     return normalize_image_generation_size(raw, label="生图尺寸")
 
 
-def _image_tool_options_from_config(config: dict[str, Any]) -> dict[str, Any] | None:
+def image_tool_options_from_config(config: dict[str, Any]) -> dict[str, Any] | None:
     raw = config.get("tool_options")
     if not isinstance(raw, dict):
         return None
     return normalize_image_generation_tool_options(raw)
 
 
-class _IncomingContext:
+class IncomingContext:
     def __init__(self) -> None:
         self.copy_set_id: str | None = None
         self.image_asset_ids: list[str] = []
@@ -212,13 +212,13 @@ class _IncomingContext:
         )
 
 
-def _collect_incoming_context(
+def collect_incoming_context(
     workflow: ProductWorkflow,
     node_id: str,
     *,
     include_transitive_product_context: bool = False,
-) -> _IncomingContext:
-    context = _IncomingContext()
+) -> IncomingContext:
+    context = IncomingContext()
     candidates = _direct_source_nodes(workflow, node_id)
     if include_transitive_product_context:
         candidate_ids = {node.id for node in candidates}
@@ -276,9 +276,9 @@ def _collect_incoming_context(
                 text="；".join(part for part in copy_parts if part),
             )
         elif candidate.node_type == WorkflowNodeType.PRODUCT_CONTEXT:
-            product_source_asset_ids = _source_asset_ids_from_config(output)
+            product_source_asset_ids = source_asset_ids_from_config(output)
             if not product_source_asset_ids:
-                product_source = _find_source_asset(workflow.product)
+                product_source = find_source_asset(workflow.product)
                 if product_source is not None:
                     product_source_asset_ids = [product_source.id]
             context.image_asset_ids.extend(product_source_asset_ids)
@@ -288,7 +288,7 @@ def _collect_incoming_context(
             if product_source_assets:
                 image_labels = "、".join(asset.original_filename or "商品原图" for asset in product_source_assets)
                 context.append_text(node=candidate, label="商品图", text=f"商品图：{image_labels}")
-            product_context = _product_context_values(workflow.product, candidate)
+            product_context = product_context_values(workflow.product, candidate)
             product_parts = [
                 f"商品：{product_context['name']}" if product_context["name"] else "",
                 f"类目：{product_context['category']}" if product_context["category"] else "",
@@ -309,7 +309,7 @@ def _collect_incoming_context(
     return context
 
 
-def _reference_assets_for_image_generation(
+def reference_assets_for_image_generation(
     session: Session,
     workflow: ProductWorkflow,
     incoming_source_asset_ids: list[str],
@@ -336,7 +336,7 @@ def _reference_assets_for_image_generation(
     return unique_image_generation_references(assets)
 
 
-def _reference_image_inputs_for_copy(
+def reference_image_inputs_for_copy(
     session: Session,
     *,
     workflow: ProductWorkflow,
@@ -357,16 +357,16 @@ def _reference_image_inputs_for_copy(
         asset_ids = list(
             dict.fromkeys(
                 [
-                    *_source_asset_ids_from_config(reference_node.config_json or {}),
-                    *_source_asset_ids_from_config(reference_node.output_json or {}),
+                    *source_asset_ids_from_config(reference_node.config_json or {}),
+                    *source_asset_ids_from_config(reference_node.output_json or {}),
                 ]
             )
         )
         if not asset_ids:
             continue
         assets = list(session.scalars(select(SourceAsset).where(SourceAsset.id.in_(asset_ids))))
-        role = _optional_config_text(reference_node.config_json or {}, "role")
-        label = _optional_config_text(reference_node.config_json or {}, "label") or reference_node.title
+        role = optional_config_text(reference_node.config_json or {}, "role")
+        label = optional_config_text(reference_node.config_json or {}, "label") or reference_node.title
         for asset in assets:
             if asset.product_id != workflow.product_id or asset.id in seen_asset_ids:
                 continue
@@ -383,7 +383,7 @@ def _reference_image_inputs_for_copy(
     return inputs
 
 
-def _downstream_reference_nodes(workflow: ProductWorkflow, node_id: str) -> list[WorkflowNode]:
+def downstream_reference_nodes(workflow: ProductWorkflow, node_id: str) -> list[WorkflowNode]:
     target_ids = list(dict.fromkeys(edge.target_node_id for edge in workflow.edges if edge.source_node_id == node_id))
     nodes_by_id = {node.id: node for node in workflow.nodes}
     return [
@@ -393,8 +393,8 @@ def _downstream_reference_nodes(workflow: ProductWorkflow, node_id: str) -> list
     ]
 
 
-def _image_instruction_with_context(node: WorkflowNode, text_contexts: list[str]) -> str | None:
-    instruction = _optional_config_text(node.config_json, "instruction")
+def image_instruction_with_context(node: WorkflowNode, text_contexts: list[str]) -> str | None:
+    instruction = optional_config_text(node.config_json, "instruction")
     compact_contexts = [item for item in text_contexts if item and item != instruction][:8]
     if not compact_contexts:
         return instruction
@@ -404,7 +404,7 @@ def _image_instruction_with_context(node: WorkflowNode, text_contexts: list[str]
     return f"上游文本上下文：{joined}"
 
 
-def _instruction_with_upstream_text(instruction: str | None, incoming_context: _IncomingContext) -> str | None:
+def instruction_with_upstream_text(instruction: str | None, incoming_context: IncomingContext) -> str | None:
     compact_contexts = [item for item in incoming_context.text_contexts if item and item != instruction][:8]
     if not compact_contexts:
         return instruction

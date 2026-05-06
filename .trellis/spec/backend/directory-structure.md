@@ -181,6 +181,10 @@ and the runtime config definitions in `config.py`, then update tests and fronten
   `generate_image_session_round_endpoint`; `presentation/routes/auth.py` keeps shorter names such as `create_session`.
 - Internal helper functions are prefixed with `_`, e.g. `_raise_http_error`, `_get_product_or_raise`,
   `_load_database_values`.
+- In `application/`, a leading `_` means "module-private". Do not import `_...` helpers/classes from sibling
+  `application` modules. If a helper is intentionally shared across submodules, give it a public name in its owning
+  module, for example `optional_config_text(...)`, `fill_reference_node(...)`, or `GeneratedWorkflowImage`. If it is
+  only needed by one module, keep the `_...` helper in that module instead of exporting it through another file.
 - Pydantic response/request classes use descriptive `PascalCase` names ending in `Response` or `Request`, for example
   `ProductDetailResponse`, `ConfigUpdateRequest`, and `GenerateImageSessionRoundRequest`.
 - SQLAlchemy models use singular `PascalCase` class names and plural table names, e.g. `Product` -> `products`,

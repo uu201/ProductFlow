@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from productflow_backend.application.product_workflow_context import _optional_config_text
+from productflow_backend.application.product_workflow_context import optional_config_text
 from productflow_backend.application.time import now_utc
 from productflow_backend.domain.enums import (
     CopyStatus,
@@ -24,7 +24,7 @@ from productflow_backend.infrastructure.db.models import (
 
 
 @dataclass(frozen=True, slots=True)
-class _GeneratedWorkflowImage:
+class GeneratedWorkflowImage:
     target_index: int
     content: bytes
     width: int
@@ -33,14 +33,14 @@ class _GeneratedWorkflowImage:
     mime_type: str
 
 
-def _create_context_copy_set(
+def create_context_copy_set(
     session: Session,
     *,
     product: Product,
     product_context: dict[str, str | None],
     node: WorkflowNode,
 ) -> CopySet:
-    instruction = _optional_config_text(node.config_json, "instruction")
+    instruction = optional_config_text(node.config_json, "instruction")
     product_name = product_context["name"] or "自由创作"
     source_note = product_context["source_note"]
     selling_points = [
@@ -79,7 +79,7 @@ def _create_context_copy_set(
     return copy_set
 
 
-def _image_asset_output(
+def image_asset_output(
     assets: list[SourceAsset],
     *,
     summary: str,
@@ -105,7 +105,7 @@ def _image_asset_output(
     }
 
 
-def _copy_node_output(
+def copy_node_output(
     copy_set: CopySet,
     *,
     creative_brief_id: str | None,
@@ -125,7 +125,7 @@ def _copy_node_output(
     return output
 
 
-def _source_asset_for_poster_variant(
+def source_asset_for_poster_variant(
     session: Session,
     *,
     workflow: ProductWorkflow,
@@ -197,7 +197,7 @@ def _source_asset_for_poster_variant(
     return None
 
 
-def _fill_reference_node(
+def fill_reference_node(
     node: WorkflowNode,
     asset: SourceAsset,
     *,
@@ -212,11 +212,11 @@ def _fill_reference_node(
     else:
         config.pop("source_poster_variant_id", None)
     node.config_json = config
-    node.output_json = _image_asset_output(
+    node.output_json = image_asset_output(
         [asset],
         summary="已填充参考图",
-        role=_optional_config_text(config, "role"),
-        label=_optional_config_text(config, "label"),
+        role=optional_config_text(config, "role"),
+        label=optional_config_text(config, "label"),
     )
     if source_poster_variant_id:
         node.output_json["source_poster_variant_id"] = source_poster_variant_id

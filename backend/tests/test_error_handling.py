@@ -6,7 +6,7 @@ from helpers import _make_demo_image_bytes
 
 from productflow_backend.application import product_workflow_graph
 from productflow_backend.application.image_sessions import create_image_session, submit_image_session_generation_task
-from productflow_backend.application.product_workflow_context import _poster_kind_from_config
+from productflow_backend.application.product_workflow_context import poster_kind_from_config
 from productflow_backend.application.product_workflow_mutations import (
     create_workflow_edge,
     create_workflow_node,
@@ -136,7 +136,7 @@ def test_high_risk_business_paths_raise_typed_validation_errors(db_session, conf
         )
 
     with pytest.raises(BusinessValidationError, match="生图节点包含不支持的图片类型"):
-        _poster_kind_from_config({"poster_kind": "invalid"})
+        poster_kind_from_config({"poster_kind": "invalid"})
 
 
 def test_workflow_edge_rollback_preserves_typed_business_errors(
