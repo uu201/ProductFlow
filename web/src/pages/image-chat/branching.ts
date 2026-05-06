@@ -512,40 +512,12 @@ export function clampGenerationCount(value: number): number {
   return Math.min(4, Math.max(1, Math.round(value)));
 }
 
-function generationTaskPriority(task: ImageSessionGenerationTask): number {
-  if (task.status === "running") {
-    return 0;
-  }
-  if (task.status === "queued") {
-    return 1;
-  }
-  if (task.status === "failed") {
-    return 2;
-  }
-  return 3;
-}
-
 export function isImageSessionGenerationTaskActive(task: ImageSessionGenerationTask): boolean {
   return task.status === "queued" || task.status === "running";
 }
 
 export function isImageSessionGenerationTaskRetryable(task: ImageSessionGenerationTask): boolean {
   return task.status === "failed" && task.is_retryable;
-}
-
-export function selectVisibleGenerationTasks(
-  tasks: ImageSessionGenerationTask[],
-  limit = 4,
-): ImageSessionGenerationTask[] {
-  return [...tasks]
-    .sort((left, right) => {
-      const priorityDelta = generationTaskPriority(left) - generationTaskPriority(right);
-      if (priorityDelta !== 0) {
-        return priorityDelta;
-      }
-      return Date.parse(right.created_at) - Date.parse(left.created_at);
-    })
-    .slice(0, limit);
 }
 
 export function mergeImageSessionStatusIntoDetail(

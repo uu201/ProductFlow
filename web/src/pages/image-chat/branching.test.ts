@@ -15,7 +15,6 @@ import {
   requiresImageSessionGenerationBase,
   selectImageGenerationTaskNextPlaceholderId,
   selectSubmittedImageGenerationTaskPlaceholderId,
-  selectVisibleGenerationTasks,
   shouldBlockDuplicateGenerationSubmit,
   shouldRefreshImageSessionDetailFromStatus,
 } from "./branching";
@@ -403,25 +402,6 @@ describe("image chat branching helpers", () => {
       pendingGeneratedRoundCount: null,
       generatedRoundCompleted: true,
     });
-  });
-
-  it("keeps active and failed generation tasks visible before old succeeded tasks", () => {
-    const tasks = selectVisibleGenerationTasks([
-      task({ id: "old-success-1", status: "succeeded", created_at: "2026-04-27T00:00:01Z" }),
-      task({ id: "old-success-2", status: "succeeded", created_at: "2026-04-27T00:00:02Z" }),
-      task({ id: "old-success-3", status: "succeeded", created_at: "2026-04-27T00:00:03Z" }),
-      task({ id: "old-success-4", status: "succeeded", created_at: "2026-04-27T00:00:04Z" }),
-      task({ id: "queued-new", status: "queued", created_at: "2026-04-27T00:00:05Z" }),
-      task({ id: "running-new", status: "running", created_at: "2026-04-27T00:00:06Z" }),
-      task({ id: "failed-new", status: "failed", created_at: "2026-04-27T00:00:07Z" }),
-    ]);
-
-    expect(tasks.map((item) => item.id)).toEqual([
-      "running-new",
-      "queued-new",
-      "failed-new",
-      "old-success-4",
-    ]);
   });
 
   it("selects the matching submitted generation task placeholder after submit", () => {

@@ -143,13 +143,13 @@ export function ProductListPage() {
             </div>
           ) : products.length ? (
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/50">
-              <table className="w-full border-collapse text-left text-sm">
+              <table className="w-full table-fixed border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/70">
                     <th className="w-[45%] px-5 py-3 font-medium text-zinc-500">商品素材</th>
-                    <th className="px-5 py-3 font-medium text-zinc-500">流程状态</th>
-                    <th className="px-5 py-3 font-medium text-zinc-500">最后更新</th>
-                    <th className="px-5 py-3 text-right font-medium text-zinc-500">操作</th>
+                    <th className="w-[18%] px-5 py-3 font-medium text-zinc-500">流程状态</th>
+                    <th className="w-[18%] px-5 py-3 font-medium text-zinc-500">最后更新</th>
+                    <th className="w-[19%] px-5 py-3 text-right font-medium text-zinc-500">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
@@ -157,20 +157,27 @@ export function ProductListPage() {
                     return (
                       <tr key={product.id} className="group transition-colors hover:bg-indigo-50/30">
                         <td className="px-5 py-4">
-                          <div className="flex items-center space-x-3">
+                          <div className="flex min-w-0 items-center gap-3">
                             <ProductThumbnail product={product} />
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <button
                                 type="button"
                                 onClick={() => navigate(`/products/${product.id}`)}
-                                className="truncate text-left font-medium text-slate-950 transition-colors hover:text-indigo-700"
+                                className="block max-w-full truncate text-left font-medium text-slate-950 transition-colors hover:text-indigo-700"
+                                title={product.name}
                               >
                                 {product.name}
                               </button>
                               <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
-                                {product.category ? <span>{product.category}</span> : null}
-                                {product.price ? <span>{formatPrice(product.price)}</span> : null}
-                                {product.source_image_filename ? <span>{product.source_image_filename}</span> : null}
+                                {product.category ? (
+                                  <span className="min-w-0 max-w-full truncate">{product.category}</span>
+                                ) : null}
+                                {product.price ? <span className="shrink-0">{formatPrice(product.price)}</span> : null}
+                                {product.source_image_filename ? (
+                                  <span className="min-w-0 max-w-full truncate" title={product.source_image_filename}>
+                                    {product.source_image_filename}
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
                           </div>

@@ -63,7 +63,6 @@ import {
   requiresImageSessionGenerationBase,
   selectImageGenerationTaskNextPlaceholderId,
   selectSubmittedImageGenerationTaskPlaceholderId,
-  selectVisibleGenerationTasks,
   shouldBlockDuplicateGenerationSubmit,
   shouldRefreshImageSessionDetailFromStatus,
 } from "./image-chat/branching";
@@ -119,21 +118,6 @@ function handleHistoryWheelScroll(event: ReactWheelEvent<HTMLDivElement>) {
 
 function getSessionReferenceAssets(imageSession: ImageSessionDetail | undefined): ImageSessionAsset[] {
   return imageSession?.assets.filter((asset) => asset.kind === "reference_upload") ?? [];
-}
-
-function generationTaskLabel(task: ImageSessionGenerationTask) {
-  if (task.status === "queued") {
-    return task.queue_position ? `排队中 · 第 ${task.queue_position} 位` : "排队中";
-  }
-  if (task.status === "running") {
-    const total = task.generation_count || 1;
-    const current = task.active_candidate_index ?? Math.min(task.completed_candidates + 1, total);
-    return `生成中 · ${task.completed_candidates}/${total} 已完成 · 当前第 ${current} 张`;
-  }
-  if (task.status === "failed") {
-    return "生成失败";
-  }
-  return "已完成";
 }
 
 function generationTaskQueueText(task: ImageSessionGenerationTask) {
@@ -350,10 +334,6 @@ export function ImageChatPage() {
   const imageSession = sessionDetailQuery.data;
   const historyBranches = useMemo(
     () => buildImageSessionHistoryTree(imageSession?.rounds ?? [], imageSession?.generation_tasks ?? []),
-    [imageSession],
-  );
-  const visibleGenerationTasks = useMemo(
-    () => selectVisibleGenerationTasks(imageSession?.generation_tasks ?? []),
     [imageSession],
   );
   const requiresGenerationBase = requiresImageSessionGenerationBase(
@@ -1264,77 +1244,6 @@ export function ImageChatPage() {
             />
 
             <div className="space-y-4">
-              {visibleGenerationTasks.length ? (
-                <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="text-sm font-semibold text-slate-950">生成任务</div>
-                  {visibleGenerationTasks.map((task) => {
-                    const active = isImageSessionGenerationTaskActive(task);
-                    const retryable = isImageSessionGenerationTaskRetryable(task);
-                    const retrying =
-                      retryGenerationTaskMutation.isPending && retryGenerationTaskMutation.variables?.taskId === task.id;
-                    return (
-                      <div
-                        key={task.id}
-                        className={`rounded-xl border px-3 py-2 text-sm ${
-                          task.status === "failed"
-                            ? "border-red-200 bg-red-50 text-red-700"
-                            : "border-indigo-100 bg-indigo-50 text-indigo-800"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="inline-flex items-center font-semibold">
-                            {active ? <Loader2 size={13} className="mr-1.5 animate-spin" /> : null}
-                            {generationTaskLabel(task)}
-                          </div>
-                          <div className="inline-flex shrink-0 items-center gap-2">
-                            <span className="text-xs opacity-70">{task.generation_count} 张</span>
-                            {retryable ? (
-                              <button
-                                type="button"
-                                onClick={() => handleRetryGenerationTask(task)}
-                                disabled={retrying}
-                                className="inline-flex h-7 items-center rounded-lg border border-red-200 bg-white px-2 text-xs font-semibold text-red-700 transition-colors hover:border-red-300 hover:bg-red-50 disabled:opacity-60"
-                              >
-                                {retrying ? (
-                                  <Loader2 size={12} className="mr-1 animate-spin" />
-                                ) : (
-                                  <RotateCcw size={12} className="mr-1" />
-                                )}
-                                重试
-                              </button>
-                            ) : task.status === "failed" ? (
-                              <span className="rounded-lg border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-500">
-                                不可重试
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPromptPreview({
-                              title: "任务 Prompt",
-                              text: task.prompt,
-                              meta: `${generationTaskLabel(task)} · ${formatImageSizeValue(task.size)} · ${task.generation_count} 张`,
-                            })
-                          }
-                          className="mt-1 line-clamp-2 rounded text-left text-xs opacity-80 transition-opacity hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                        >
-                          {task.prompt}
-                        </button>
-                        {task.status === "failed" ? (
-                          <div className="mt-1 text-xs">{task.failure_reason ?? "图片生成失败，请稍后重试"}</div>
-                        ) : generationTaskQueueText(task) ? (
-                          <div className="mt-1 text-xs opacity-70">
-                            {generationTaskQueueText(task)}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-
               {successMessage ? (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
                   {successMessage}
