@@ -58,6 +58,17 @@ export function compactImageToolOptions(
   return entries.length ? (Object.fromEntries(entries) as ImageToolOptions) : undefined;
 }
 
+export function pruneSelectedReferenceIds(
+  selectedIds: readonly string[],
+  availableIds: readonly string[],
+  maxSelectedCount = Number.POSITIVE_INFINITY,
+): string[] {
+  const available = new Set(availableIds);
+  return selectedIds
+    .filter((id, index) => available.has(id) && selectedIds.indexOf(id) === index)
+    .slice(0, maxSelectedCount);
+}
+
 function stringOption(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from base64 import b64decode, b64encode
+from base64 import b64encode
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -15,6 +15,8 @@ from productflow_backend.infrastructure.image.base import parse_size
 from productflow_backend.infrastructure.image.responses_provider import (
     OpenAIResponsesImageClient,
     ResponsesReferenceImage,
+    build_responses_reference_images_from_data_urls,
+    decode_reference_data_url,
 )
 from productflow_backend.infrastructure.prompts import render_prompt_template
 
@@ -212,23 +214,15 @@ class ImageChatService:
     ) -> list[ResponsesReferenceImage]:
         references: list[ResponsesReferenceImage] = []
 
-        for data_url in manual_reference_images[:6]:
-            references.append(self._decode_reference_image(data_url))
+        references.extend(build_responses_reference_images_from_data_urls(manual_reference_images, limit=6))
 
         history_references: list[ResponsesReferenceImage] = []
         for turn in reversed(history):
             if turn.role != "assistant" or not turn.image_data_url:
                 continue
-            history_references.append(self._decode_reference_image(turn.image_data_url))
+            history_references.append(decode_reference_data_url(turn.image_data_url))
             if len(history_references) >= 3:
                 break
         history_references.reverse()
         references.extend(history_references)
         return references[:6]
-
-    def _decode_reference_image(self, data_url: str) -> ResponsesReferenceImage:
-        if not data_url.startswith("data:") or ";base64," not in data_url:
-            raise RuntimeError("对话中的参考图不是合法 data URL")
-        header, encoded = data_url.split(",", maxsplit=1)
-        mime_type = header[5:].split(";", maxsplit=1)[0] or "image/png"
-        return ResponsesReferenceImage(bytes_data=b64decode(encoded), mime_type=mime_type)

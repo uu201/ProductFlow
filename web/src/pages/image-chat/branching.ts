@@ -5,7 +5,7 @@ import type {
   ImageSessionStatus,
   ImageToolOptions,
 } from "../../lib/types";
-export { compactImageToolOptions } from "../../lib/imageToolOptions";
+export { compactImageToolOptions, pruneSelectedReferenceIds } from "../../lib/imageToolOptions";
 
 export interface ImageRoundGroup {
   id: string;
@@ -365,17 +365,6 @@ export function clampGenerationCount(value: number): number {
     return 1;
   }
   return Math.min(4, Math.max(1, Math.round(value)));
-}
-
-export function pruneSelectedReferenceIds(
-  selectedIds: string[],
-  availableIds: string[],
-  maxCount = Number.POSITIVE_INFINITY,
-): string[] {
-  const available = new Set(availableIds);
-  return selectedIds
-    .filter((id, index) => available.has(id) && selectedIds.indexOf(id) === index)
-    .slice(0, maxCount);
 }
 
 function generationTaskPriority(task: ImageSessionGenerationTask): number {

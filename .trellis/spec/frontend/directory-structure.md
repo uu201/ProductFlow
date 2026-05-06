@@ -87,6 +87,9 @@ Use `web/src/components/` for reusable presentational components with small prop
 
 - `TopNav.tsx`
 - `StatusPill.tsx`
+- `ImageGenerationSettingsTabs.tsx`, `ImageGenerationSettingsPanel.tsx`, `ImageSizePicker.tsx`, and
+  `ImageToolControls.tsx` for the shared image generation settings shell and controls used by both the image-session page
+  and product workflow inspector.
 
 If a component is only used inside one page and tightly coupled to that page's state, keep it either in the page file or
 in a page-local directory. `ProductDetailPage.tsx` uses `web/src/pages/product-detail/` for workflow canvas constants,

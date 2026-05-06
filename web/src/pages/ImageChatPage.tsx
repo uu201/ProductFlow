@@ -21,8 +21,9 @@ import {
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { ImageSizePicker } from "../components/ImageSizePicker";
 import { ImageDropZone } from "../components/ImageDropZone";
+import { ImageGenerationSettingsPanel } from "../components/ImageGenerationSettingsPanel";
+import { ImageGenerationSettingsTabs, type ImageGenerationSettingsTab } from "../components/ImageGenerationSettingsTabs";
 import { ImageToolControls } from "../components/ImageToolControls";
 import { PromptPreviewDialog, type PromptPreview } from "../components/PromptPreviewDialog";
 import { TopNav } from "../components/TopNav";
@@ -241,7 +242,7 @@ export function ImageChatPage() {
   const [draft, setDraft] = useState("");
   const [size, setSize] = useState("1024x1024");
   const [toolOptions, setToolOptions] = useState<ImageToolOptions>({});
-  const [settingsTab, setSettingsTab] = useState<"basic" | "advanced">("basic");
+  const [settingsTab, setSettingsTab] = useState<ImageGenerationSettingsTab>("basic");
   const [titleDraft, setTitleDraft] = useState("");
   const [renameEnabled, setRenameEnabled] = useState(false);
   const [targetProductId, setTargetProductId] = useState("");
@@ -1254,29 +1255,11 @@ export function ImageChatPage() {
               </div>
             </div>
 
-            <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
-              {(
-                [
-                  ["basic", "生成设置"],
-                  ["advanced", "高级"],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setSettingsTab(value)}
-                  className={`h-9 rounded-lg text-sm font-semibold transition-colors ${
-                    settingsTab === value ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-900"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="space-y-4">
-              {settingsTab === "basic" ? (
-                <>
+            <ImageGenerationSettingsTabs
+              value={settingsTab}
+              onChange={setSettingsTab}
+              basic={
+                <div className="space-y-4">
                   <ProductAssociationPanel
                     isProductMode={isProductMode}
                     product={productQuery.data}
@@ -1324,44 +1307,27 @@ export function ImageChatPage() {
                     />
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-slate-950">参数</div>
-                      <span className="text-[11px] font-medium text-slate-400">{formatImageSizeValue(size)}</span>
-                    </div>
-                    <ImageSizePicker
-                      value={size}
-                      presets={sizeOptions}
-                      maxDimension={imageGenerationMaxDimension}
-                      onChange={setSize}
-                    />
-                    <label className="mt-3 block" htmlFor="generation-count">
-                      <span className="mb-1.5 block text-xs font-semibold text-slate-700">生成数量</span>
-                      <select
-                        id="generation-count"
-                        value={generationCount}
-                        onChange={(event) => setGenerationCount(clampGenerationCount(Number(event.target.value)))}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                      >
-                        {[1, 2, 3, 4].map((count) => (
-                          <option key={count} value={count}>
-                            {count} 张候选
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <ImageToolControls
-                    value={toolOptions}
-                    allowedFields={imageToolAllowedFields}
-                    onChange={setToolOptions}
+                  <ImageGenerationSettingsPanel
+                    size={size}
+                    sizeOptions={sizeOptions}
+                    maxDimension={imageGenerationMaxDimension}
+                    toolOptions={toolOptions}
+                    allowedToolFields={imageToolAllowedFields}
+                    generationCount={generationCount}
+                    generationCountOptions={[1, 2, 3, 4]}
+                    onSizeChange={setSize}
+                    onToolOptionsChange={setToolOptions}
+                    onGenerationCountChange={(count) => setGenerationCount(clampGenerationCount(count))}
+                    showToolOptions={false}
                   />
-                </>
-              )}
+                </div>
+              }
+              advanced={
+                <ImageToolControls value={toolOptions} allowedFields={imageToolAllowedFields} onChange={setToolOptions} />
+              }
+            />
 
+            <div className="space-y-4">
               {visibleGenerationTasks.length ? (
                 <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
                   <div className="text-sm font-semibold text-slate-950">生成任务</div>

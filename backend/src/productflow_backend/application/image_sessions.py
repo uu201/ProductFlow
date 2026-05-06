@@ -6,10 +6,11 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from dramatiq.middleware.time_limit import TimeLimitExceeded
 from sqlalchemy import desc, func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -20,9 +21,14 @@ from productflow_backend.application.admission import (
     get_generation_task_queue_metadata,
     get_queued_generation_positions,
 )
+from productflow_backend.application.image_generation_core import (
+    normalize_image_generation_tool_options,
+    provider_output_with_actual_image_size,
+    unique_image_generation_ids,
+)
 from productflow_backend.application.queue_submission import enqueue_or_mark_failed
 from productflow_backend.application.time import now_utc
-from productflow_backend.config import filter_image_tool_options, normalize_image_generation_size
+from productflow_backend.config import normalize_image_generation_size
 from productflow_backend.domain.durable_generation_tasks import (
     IMAGE_SESSION_GENERATION_TASK_CONTRACT,
     QUEUE_UNAVAILABLE_DETAIL,
@@ -39,7 +45,7 @@ from productflow_backend.infrastructure.db.models import (
     new_id,
 )
 from productflow_backend.infrastructure.db.session import get_session_factory
-from productflow_backend.infrastructure.image.base import image_dimensions_from_bytes, infer_extension
+from productflow_backend.infrastructure.image.base import infer_extension
 from productflow_backend.infrastructure.image.chat_service import ImageChatService, ImageChatTurn
 from productflow_backend.infrastructure.image.responses_provider import PROVIDER_TEXT_OUTPUT_MESSAGE
 from productflow_backend.infrastructure.queue import (
@@ -132,7 +138,7 @@ def _attach_generation_task_queue_metadata(session: Session, image_session: Imag
             overview=overview,
             queued_positions=queued_positions,
         )
-        task._queue_metadata = metadata
+        task.__dict__["_queue_metadata"] = metadata
 
 
 def _get_product_or_raise(session: Session, product_id: str) -> Product:
@@ -181,14 +187,7 @@ def _find_session_asset_or_raise(
 
 
 def _unique_ids(ids: list[str] | None) -> list[str]:
-    seen: set[str] = set()
-    values: list[str] = []
-    for item in ids or []:
-        if item in seen:
-            continue
-        seen.add(item)
-        values.append(item)
-    return values
+    return unique_image_generation_ids(ids)
 
 
 def _has_prior_generation_request(
@@ -243,9 +242,7 @@ def _build_branch_generation_context(
             missing_message="会话参考图不存在",
         )
         normalized_reference_ids.append(reference_asset.id)
-        manual_references.append(
-            _session_data_url(storage, reference_asset.storage_path, reference_asset.mime_type)
-        )
+        manual_references.append(_session_data_url(storage, reference_asset.storage_path, reference_asset.mime_type))
 
     return [], manual_references[:6], None, normalized_base_asset_id, normalized_reference_ids
 
@@ -292,7 +289,7 @@ def _validate_generation_request(
 
 
 def _normalize_tool_options(tool_options: dict[str, Any] | None) -> dict[str, Any] | None:
-    return filter_image_tool_options(tool_options)
+    return normalize_image_generation_tool_options(tool_options)
 
 
 def _provider_output_with_actual_size(
@@ -301,30 +298,11 @@ def _provider_output_with_actual_size(
     requested_size: str,
     image_bytes: bytes,
 ) -> dict[str, Any]:
-    output = dict(provider_output_json or {})
-    dimensions = image_dimensions_from_bytes(image_bytes)
-    if dimensions is None:
-        return output
-
-    actual_size = f"{dimensions[0]}x{dimensions[1]}"
-    metadata = output.get("_productflow")
-    metadata = dict(metadata) if isinstance(metadata, dict) else {}
-    metadata["actual_image_size"] = actual_size
-    if actual_size != requested_size:
-        raw_notes = metadata.get("notes")
-        notes = [note for note in raw_notes if isinstance(note, dict)] if isinstance(raw_notes, list) else []
-        if not any(note.get("kind") == "actual_size_mismatch" for note in notes):
-            notes.append(
-                {
-                    "kind": "actual_size_mismatch",
-                    "message": f"供应商实际返回 {actual_size}，请求尺寸为 {requested_size}。",
-                    "requested_size": requested_size,
-                    "actual_size": actual_size,
-                }
-            )
-        metadata["notes"] = notes
-    output["_productflow"] = metadata
-    return output
+    return provider_output_with_actual_image_size(
+        provider_output_json,
+        requested_size=requested_size,
+        image_bytes=image_bytes,
+    )
 
 
 def list_image_sessions(
@@ -1001,24 +979,27 @@ def _mark_image_generation_task_running(
         task.progress_updated_at = now
         session.commit()
         return _ImageSessionGenerationTaskClaimResult(claimed=False, should_requeue=True)
-    result = session.execute(
-        update(ImageSessionGenerationTask)
-        .where(
-            ImageSessionGenerationTask.id == task.id,
-            ImageSessionGenerationTask.status.in_(IMAGE_SESSION_GENERATION_TASK_CONTRACT.queued_statuses),
-        )
-        .values(
-            status=IMAGE_SESSION_GENERATION_TASK_CONTRACT.running_statuses[0],
-            started_at=now,
-            finished_at=None,
-            failure_reason=None,
-            progress_phase="running",
-            progress_updated_at=now,
-            active_candidate_index=None,
-            provider_response_id=None,
-            provider_response_status=None,
-            progress_metadata=None,
-            attempts=ImageSessionGenerationTask.attempts + 1,
+    result = cast(
+        CursorResult[Any],
+        session.execute(
+            update(ImageSessionGenerationTask)
+            .where(
+                ImageSessionGenerationTask.id == task.id,
+                ImageSessionGenerationTask.status.in_(IMAGE_SESSION_GENERATION_TASK_CONTRACT.queued_statuses),
+            )
+            .values(
+                status=IMAGE_SESSION_GENERATION_TASK_CONTRACT.running_statuses[0],
+                started_at=now,
+                finished_at=None,
+                failure_reason=None,
+                progress_phase="running",
+                progress_updated_at=now,
+                active_candidate_index=None,
+                provider_response_id=None,
+                provider_response_status=None,
+                progress_metadata=None,
+                attempts=ImageSessionGenerationTask.attempts + 1,
+            )
         )
     )
     if result.rowcount != 1:

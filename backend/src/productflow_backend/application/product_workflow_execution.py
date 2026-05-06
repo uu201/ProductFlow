@@ -6,16 +6,18 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from dramatiq.middleware.time_limit import TimeLimitExceeded
 from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from productflow_backend.application import product_workflow_graph
 from productflow_backend.application.admission import ensure_generation_capacity
-from productflow_backend.application.contracts import PosterGenerationInput, ProductInput, ReferenceImageInput
+from productflow_backend.application.contracts import PosterGenerationInput, ProductInput
+from productflow_backend.application.image_generation_core import build_stored_image_reference_payload
 from productflow_backend.application.product_workflow_artifacts import (
     _copy_node_output,
     _create_context_copy_set,
@@ -405,13 +407,16 @@ def _claim_workflow_node_run(session: Session, *, node_run_id: str, node_id: str
     """Atomically claim one queued node run so duplicate Dramatiq messages do not execute it twice."""
 
     now = now_utc()
-    result = session.execute(
-        update(WorkflowNodeRun)
-        .where(
-            WorkflowNodeRun.id == node_run_id,
-            WorkflowNodeRun.status == WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_queued_statuses[0],
+    result = cast(
+        CursorResult[Any],
+        session.execute(
+            update(WorkflowNodeRun)
+            .where(
+                WorkflowNodeRun.id == node_run_id,
+                WorkflowNodeRun.status == WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_queued_statuses[0],
+            )
+            .values(status=WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_running_statuses[0], started_at=now)
         )
-        .values(status=WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_running_statuses[0], started_at=now)
     )
     if result.rowcount != 1:
         session.rollback()
@@ -762,6 +767,10 @@ def _execute_image_generation(
         incoming_context.image_asset_ids,
         incoming_context.poster_variant_ids,
     )
+    reference_payload = build_stored_image_reference_payload(
+        reference_assets,
+        resolve_storage_path=storage.resolve,
+    )
     render_input = PosterGenerationInput(
         copy_prompt_mode="copy" if has_linked_copy_input else "image_edit",
         product_name=product_context["name"] or "",
@@ -775,15 +784,8 @@ def _execute_image_generation(
         selling_points=copy_set.selling_points,
         poster_headline=copy_set.poster_headline,
         cta=copy_set.cta,
-        source_image=(Path(storage.resolve(reference_assets[0].storage_path)) if reference_assets else None),
-        reference_images=[
-            ReferenceImageInput(
-                path=Path(storage.resolve(asset.storage_path)),
-                mime_type=asset.mime_type,
-                filename=asset.original_filename,
-            )
-            for asset in reference_assets
-        ],
+        source_image=reference_payload.source_image,
+        reference_images=reference_payload.reference_images,
     )
     poster_ids: list[str] = []
     filled_source_asset_ids: list[str] = []

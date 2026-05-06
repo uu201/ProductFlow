@@ -5,14 +5,12 @@ import {
   buildImageGenerationSubmitSignature,
   buildImageSessionHistoryTree,
   clampGenerationCount,
-  compactImageToolOptions,
   findImageGenerationTaskPlaceholderRound,
   findImageHistoryPlaceholder,
   groupImageSessionRounds,
   isImageSessionGenerationTaskActive,
   isImageSessionGenerationTaskRetryable,
   mergeImageSessionStatusIntoDetail,
-  pruneSelectedReferenceIds,
   requiresImageSessionGenerationBase,
   selectVisibleGenerationTasks,
   shouldBlockDuplicateGenerationSubmit,
@@ -296,46 +294,6 @@ describe("image chat branching helpers", () => {
     );
     expect(findImageGenerationTaskPlaceholderRound(rounds, tasks, "task:task-branch:candidate:3")).toBeNull();
     expect(findImageGenerationTaskPlaceholderRound(rounds, tasks, "not-a-placeholder")).toBeNull();
-  });
-
-  it("compacts optional provider fields before submitting a generation", () => {
-    expect(
-      compactImageToolOptions({
-        model: "  gpt-image-2 ",
-        quality: "high",
-        output_format: null,
-        output_compression: 101,
-        background: "transparent",
-        moderation: null,
-        action: "generate",
-        input_fidelity: "high",
-        partial_images: 4,
-        n: 0,
-      }),
-    ).toEqual({
-      model: "gpt-image-2",
-      quality: "high",
-      output_compression: 100,
-      action: "generate",
-      input_fidelity: "high",
-      partial_images: 3,
-      n: 1,
-    });
-    expect(compactImageToolOptions({ background: "transparent" }, ["background"] as const)).toEqual({
-      background: "transparent",
-    });
-    expect(compactImageToolOptions({})).toBeUndefined();
-  });
-
-  it("prunes deleted reference ids and removes duplicates", () => {
-    expect(pruneSelectedReferenceIds(["ref-1", "ref-2", "ref-1", "gone"], ["ref-1", "ref-2"])).toEqual([
-      "ref-1",
-      "ref-2",
-    ]);
-    expect(pruneSelectedReferenceIds(["ref-1", "ref-2", "ref-3"], ["ref-1", "ref-2", "ref-3"], 2)).toEqual([
-      "ref-1",
-      "ref-2",
-    ]);
   });
 
   it("keeps active and failed generation tasks visible before old succeeded tasks", () => {

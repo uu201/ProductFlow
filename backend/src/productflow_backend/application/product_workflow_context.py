@@ -7,7 +7,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from productflow_backend.application.contracts import ReferenceImageInput
-from productflow_backend.config import filter_image_tool_options, normalize_image_generation_size
+from productflow_backend.application.image_generation_core import (
+    normalize_image_generation_tool_options,
+    unique_image_generation_references,
+)
+from productflow_backend.config import normalize_image_generation_size
 from productflow_backend.domain.enums import (
     PosterKind,
     SourceAssetKind,
@@ -180,7 +184,7 @@ def _image_tool_options_from_config(config: dict[str, Any]) -> dict[str, Any] | 
     raw = config.get("tool_options")
     if not isinstance(raw, dict):
         return None
-    return filter_image_tool_options(raw)
+    return normalize_image_generation_tool_options(raw)
 
 
 class _IncomingContext:
@@ -328,7 +332,7 @@ def _reference_assets_for_image_generation(
                     storage_path=poster.storage_path,
                 )
             )
-    return list({asset.storage_path: asset for asset in assets}.values())
+    return unique_image_generation_references(assets)
 
 
 def _reference_image_inputs_for_copy(

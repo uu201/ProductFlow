@@ -1,0 +1,82 @@
+import { ImageToolControls } from "./ImageToolControls";
+import { ImageSizePicker } from "./ImageSizePicker";
+import type { ImageSizeOption } from "../lib/imageSizes";
+import { formatImageSizeValue } from "../lib/imageSizes";
+import type { ImageToolOptionKey, ImageToolOptions } from "../lib/types";
+
+interface ImageGenerationSettingsPanelProps {
+  size: string;
+  sizeOptions: ImageSizeOption[];
+  maxDimension: number;
+  toolOptions: ImageToolOptions;
+  allowedToolFields: readonly ImageToolOptionKey[];
+  onSizeChange: (size: string) => void;
+  onToolOptionsChange: (toolOptions: ImageToolOptions) => void;
+  surface?: "card" | "plain";
+  generationCount?: number;
+  generationCountOptions?: readonly number[];
+  generationCountLabel?: string;
+  generationCountDescription?: string;
+  onGenerationCountChange?: (count: number) => void;
+  showToolOptions?: boolean;
+}
+
+export function ImageGenerationSettingsPanel({
+  size,
+  sizeOptions,
+  maxDimension,
+  toolOptions,
+  allowedToolFields,
+  onSizeChange,
+  onToolOptionsChange,
+  surface = "card",
+  generationCount,
+  generationCountOptions,
+  generationCountLabel = "生成数量",
+  generationCountDescription,
+  onGenerationCountChange,
+  showToolOptions = true,
+}: ImageGenerationSettingsPanelProps) {
+  const showCount = generationCount !== undefined && generationCountOptions?.length && onGenerationCountChange;
+  const containerClassName = surface === "card" ? "rounded-2xl border border-slate-200 bg-white p-4" : "space-y-3";
+
+  return (
+    <div className={containerClassName}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-sm font-semibold text-slate-950">参数</div>
+        <span className="text-[11px] font-medium text-slate-400">{formatImageSizeValue(size)}</span>
+      </div>
+      <ImageSizePicker value={size} presets={sizeOptions} maxDimension={maxDimension} onChange={onSizeChange} />
+      {showCount ? (
+        <label className="mt-3 block" htmlFor="image-generation-count">
+          <span className="mb-1.5 block text-xs font-semibold text-slate-700">{generationCountLabel}</span>
+          {generationCountDescription ? (
+            <span className="mb-1.5 block text-[11px] leading-5 text-slate-500">{generationCountDescription}</span>
+          ) : null}
+          <select
+            id="image-generation-count"
+            value={generationCount}
+            onChange={(event) => onGenerationCountChange(Number(event.target.value))}
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          >
+            {generationCountOptions.map((count) => (
+              <option key={count} value={count}>
+                {count} 张候选
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {showToolOptions ? (
+        <div className="mt-3">
+          <ImageToolControls
+            surface="plain"
+            value={toolOptions}
+            allowedFields={allowedToolFields}
+            onChange={onToolOptionsChange}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}

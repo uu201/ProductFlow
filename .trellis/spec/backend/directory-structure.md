@@ -134,6 +134,11 @@ Put workflow rules and orchestration in `backend/src/productflow_backend/applica
 This layer receives a SQLAlchemy `Session` from callers. It is allowed to call infrastructure adapters such as
 `LocalStorage`, provider factories, and `PosterRenderer`, but FastAPI-specific types should not leak into it.
 
+`application/image_generation_core.py` owns provider-agnostic image generation helpers that are shared by product workflow
+image nodes and continuous image-session generation: reference id/path de-duplication, stored image reference payload
+construction, provider tool option normalization, and provider output metadata augmentation. It must not know workflow
+node IDs, image-session round IDs, HTTP schemas, queue delivery, or concrete provider clients.
+
 ### Domain layer
 
 `backend/src/productflow_backend/domain/enums.py` is the shared home for enum values such as `ProductWorkflowState`,

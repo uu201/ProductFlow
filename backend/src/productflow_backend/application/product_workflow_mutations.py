@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from productflow_backend.application import product_workflow_graph
+from productflow_backend.application.image_generation_core import normalize_image_generation_tool_options
 from productflow_backend.application.product_workflow_artifacts import (
     _fill_reference_node,
     _image_asset_output,
@@ -15,7 +16,6 @@ from productflow_backend.application.product_workflow_artifacts import (
 from productflow_backend.application.product_workflow_context import _image_size_from_config, _optional_config_text
 from productflow_backend.application.time import now_utc
 from productflow_backend.application.use_cases import update_copy_set
-from productflow_backend.config import filter_image_tool_options
 from productflow_backend.domain.durable_generation_tasks import WORKFLOW_RUN_GENERATION_TASK_CONTRACT
 from productflow_backend.domain.enums import (
     SourceAssetKind,
@@ -56,7 +56,7 @@ def _normalize_node_config(node_type: WorkflowNodeType, config_json: dict[str, A
             config["size"] = normalized_size
         if "tool_options" in config:
             raw_tool_options = config.get("tool_options")
-            config["tool_options"] = filter_image_tool_options(
+            config["tool_options"] = normalize_image_generation_tool_options(
                 raw_tool_options if isinstance(raw_tool_options, dict) else None
             )
     return config
@@ -424,10 +424,7 @@ def _normalize_product_context_singleton(session: Session, workflow: ProductWork
         session.execute(
             delete(WorkflowEdge).where(
                 (WorkflowEdge.workflow_id == workflow.id)
-                & (
-                    WorkflowEdge.source_node_id.in_(duplicate_ids)
-                    | WorkflowEdge.target_node_id.in_(duplicate_ids)
-                )
+                & (WorkflowEdge.source_node_id.in_(duplicate_ids) | WorkflowEdge.target_node_id.in_(duplicate_ids))
             )
         )
         session.execute(delete(WorkflowNodeRun).where(WorkflowNodeRun.node_id.in_(duplicate_ids)))

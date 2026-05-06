@@ -14,7 +14,8 @@ import {
 } from "lucide-react";
 
 import { ImageDropZone } from "../../components/ImageDropZone";
-import { ImageSizePicker } from "../../components/ImageSizePicker";
+import { ImageGenerationSettingsPanel } from "../../components/ImageGenerationSettingsPanel";
+import { ImageGenerationSettingsTabs, type ImageGenerationSettingsTab } from "../../components/ImageGenerationSettingsTabs";
 import { ImageToolControls } from "../../components/ImageToolControls";
 import { PromptPreviewDialog, type PromptPreview } from "../../components/PromptPreviewDialog";
 import type { DownloadableImage } from "../../lib/image-downloads";
@@ -546,6 +547,7 @@ function ImageGenerationInspector({
   downstreamReferenceCount: number;
   onPreviewPrompt: (preview: PromptPreview) => void;
 }) {
+  const [settingsTab, setSettingsTab] = useState<ImageGenerationSettingsTab>("basic");
   const savedInstruction = node.output_json ? outputText(node.output_json, "instruction") : "";
   const previewText = savedInstruction || draft.instruction;
   const promptMeta = savedInstruction ? "最近一次运行保存的生图指令" : "当前草稿";
@@ -557,54 +559,66 @@ function ImageGenerationInspector({
           请先连接一个参考图节点，生成结果会写入该节点。
         </div>
       ) : null}
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-xs font-semibold text-slate-700">生成数量</div>
-            <div className="mt-1 text-[11px] leading-5 text-slate-500">
-              由下游参考图节点决定；当前会生成 {downstreamReferenceCount} 张。
+      <ImageGenerationSettingsTabs
+        value={settingsTab}
+        onChange={setSettingsTab}
+        basic={
+          <div className="space-y-3">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold text-slate-700">生成数量</div>
+                  <div className="mt-1 text-[11px] leading-5 text-slate-500">
+                    由下游参考图节点决定；当前会生成 {downstreamReferenceCount} 张。
+                  </div>
+                </div>
+                <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
+                  {downstreamReferenceCount} 张
+                </span>
+              </div>
             </div>
+            <TextArea
+              label="画面描述"
+              value={draft.instruction}
+              onChange={(value) => onDraftChange({ ...draft, instruction: value })}
+            />
+            {previewText.trim() ? (
+              <button
+                type="button"
+                onClick={() =>
+                  onPreviewPrompt({
+                    title: "生图 Prompt",
+                    text: previewText,
+                    meta: promptMeta,
+                  })
+                }
+                className="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-950"
+              >
+                <FileText size={13} className="mr-1.5" />
+                回看完整 Prompt
+              </button>
+            ) : null}
+            <ImageGenerationSettingsPanel
+              surface="plain"
+              size={draft.size}
+              sizeOptions={imageSizeOptions}
+              maxDimension={imageGenerationMaxDimension}
+              toolOptions={draft.toolOptions}
+              allowedToolFields={imageToolAllowedFields}
+              onSizeChange={(size) => onDraftChange({ ...draft, size })}
+              onToolOptionsChange={(toolOptions) => onDraftChange({ ...draft, toolOptions })}
+              showToolOptions={false}
+            />
           </div>
-          <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
-            {downstreamReferenceCount} 张
-          </span>
-        </div>
-      </div>
-      <TextArea
-        label="画面描述"
-        value={draft.instruction}
-        onChange={(value) => onDraftChange({ ...draft, instruction: value })}
-      />
-      {previewText.trim() ? (
-        <button
-          type="button"
-          onClick={() =>
-            onPreviewPrompt({
-              title: "生图 Prompt",
-              text: previewText,
-              meta: promptMeta,
-            })
-          }
-          className="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-950"
-        >
-          <FileText size={13} className="mr-1.5" />
-          回看完整 Prompt
-        </button>
-      ) : null}
-      <div>
-        <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">尺寸</div>
-        <ImageSizePicker
-          value={draft.size}
-          presets={imageSizeOptions}
-          maxDimension={imageGenerationMaxDimension}
-          onChange={(size) => onDraftChange({ ...draft, size })}
-        />
-      </div>
-      <ImageToolControls
-        surface="plain"
-        value={draft.toolOptions}
-        allowedFields={imageToolAllowedFields}
-        onChange={(toolOptions) => onDraftChange({ ...draft, toolOptions })}
+        }
+        advanced={
+          <ImageToolControls
+            surface="plain"
+            value={draft.toolOptions}
+            allowedFields={imageToolAllowedFields}
+            onChange={(toolOptions) => onDraftChange({ ...draft, toolOptions })}
+          />
+        }
       />
     </div>
   );

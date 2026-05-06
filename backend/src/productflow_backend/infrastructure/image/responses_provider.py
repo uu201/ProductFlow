@@ -117,6 +117,55 @@ def _mime_type_for_path(path: Path) -> str:
     return "image/png"
 
 
+def decode_reference_data_url(data_url: str) -> ResponsesReferenceImage:
+    if not data_url.startswith("data:") or ";base64," not in data_url:
+        raise RuntimeError("对话中的参考图不是合法 data URL")
+    header, encoded = data_url.split(",", maxsplit=1)
+    mime_type = header[5:].split(";", maxsplit=1)[0] or "image/png"
+    return ResponsesReferenceImage(bytes_data=decode_b64_image(encoded), mime_type=mime_type)
+
+
+def build_responses_reference_images_from_data_urls(
+    data_urls: list[str],
+    *,
+    limit: int,
+) -> list[ResponsesReferenceImage]:
+    return [decode_reference_data_url(data_url) for data_url in data_urls[:limit]]
+
+
+def build_responses_reference_images_from_poster(poster: PosterGenerationInput) -> list[ResponsesReferenceImage]:
+    references: list[ResponsesReferenceImage] = []
+    seen_keys: set[str] = set()
+
+    def add_path(path: Path, *, mime_type: str, filename: str | None = None) -> None:
+        resolved = path.resolve()
+        key = str(resolved)
+        if key in seen_keys:
+            return
+        seen_keys.add(key)
+        references.append(
+            ResponsesReferenceImage(
+                bytes_data=resolved.read_bytes(),
+                mime_type=mime_type,
+                filename=filename or resolved.name,
+            )
+        )
+
+    if poster.source_image is not None:
+        add_path(
+            poster.source_image,
+            mime_type=_mime_type_for_path(poster.source_image),
+            filename=poster.source_image.name,
+        )
+    for reference in poster.reference_images:
+        add_path(reference.path, mime_type=reference.mime_type, filename=reference.filename)
+    return references
+
+
+def poster_has_reference_input(poster: PosterGenerationInput) -> bool:
+    return poster.source_image is not None or bool(poster.reference_images)
+
+
 def _mime_type_from_output_format(value: Any) -> str | None:
     normalized = "" if value is None else str(value).strip().lower()
     return {
@@ -689,7 +738,7 @@ class OpenAIResponsesImageProvider(ImageProvider):
         result = self.client.generate_image(
             prompt=prompt,
             size=size,
-            reference_images=self._build_reference_images(poster),
+            reference_images=build_responses_reference_images_from_poster(poster),
             tool_options=poster.tool_options,
         )
         actual_dimensions = image_dimensions_from_bytes(result.bytes_data)
@@ -707,34 +756,6 @@ class OpenAIResponsesImageProvider(ImageProvider):
             ),
             self.model,
         )
-
-    def _build_reference_images(self, poster: PosterGenerationInput) -> list[ResponsesReferenceImage]:
-        references: list[ResponsesReferenceImage] = []
-        seen_paths: set[str] = set()
-
-        def add_path(path: Path, *, mime_type: str, filename: str | None = None) -> None:
-            resolved = path.resolve()
-            key = str(resolved)
-            if key in seen_paths:
-                return
-            seen_paths.add(key)
-            references.append(
-                ResponsesReferenceImage(
-                    bytes_data=resolved.read_bytes(),
-                    mime_type=mime_type,
-                    filename=filename or resolved.name,
-                )
-            )
-
-        if poster.source_image is not None:
-            add_path(
-                poster.source_image,
-                mime_type=_mime_type_for_path(poster.source_image),
-                filename=poster.source_image.name,
-            )
-        for reference in poster.reference_images:
-            add_path(reference.path, mime_type=reference.mime_type, filename=reference.filename)
-        return references
 
     def _build_prompt(
         self,
@@ -759,7 +780,7 @@ class OpenAIResponsesImageProvider(ImageProvider):
                 "selling_points": "；".join(poster.selling_points[:3]),
                 "cta": poster.cta,
                 "context_block": context_block,
-                "reference_policy": self.poster_image_reference_policy if self._has_reference_input(poster) else "",
+                "reference_policy": self.poster_image_reference_policy if poster_has_reference_input(poster) else "",
                 "size": size,
                 "kind": kind.value,
                 "kind_label": "主图" if kind == PosterKind.MAIN_IMAGE else "促销海报",
@@ -802,9 +823,6 @@ class OpenAIResponsesImageProvider(ImageProvider):
             if reference_labels:
                 lines.append(f"- 参考图：{'；'.join(reference_labels)}")
         return "\n".join(lines) if lines else "- 无显式上游上下文。"
-
-    def _has_reference_input(self, poster: PosterGenerationInput) -> bool:
-        return poster.source_image is not None or bool(poster.reference_images)
 
     def _build_kind_requirements(self, kind: PosterKind) -> str:
         kind_label = "主图" if kind == PosterKind.MAIN_IMAGE else "海报/竖图"

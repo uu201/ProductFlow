@@ -152,6 +152,11 @@ If a component starts needing API calls, consider whether it is actually a route
 - Bad: `ImageChatPage` accepts custom dimensions while `InspectorPanel` still exposes a raw text field.
 - Bad: `ImageChatPage` supports provider quality/format/fidelity fields while `InspectorPanel` has a separate partial
   implementation or sends raw unnormalized `tool_options`.
+- Bad: product workflow inspector and image-session generation rebuild separate size/tool/count panels instead of sharing
+  `ImageGenerationSettingsPanel` where the behavior is the same.
+- Bad: one image generation entry uses a combined settings page while another uses `生成设置 / 高级`; product workflow
+  image nodes and image-session generation should both use `ImageGenerationSettingsTabs` to keep common
+  size/count/prompt controls separate from advanced provider tool options.
 - Bad: a custom value is auto-reset because it is not one of the built-in preset buttons.
 
 ### 6. Tests Required
