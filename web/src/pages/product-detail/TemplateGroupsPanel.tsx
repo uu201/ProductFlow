@@ -65,10 +65,6 @@ function summarizeReferenceInput(template: CanvasTemplateSummary): string | null
   return labels[0];
 }
 
-function summarizeScenario(template: CanvasTemplateSummary): string {
-  return template.scenario.title || template.scenario.tags[0] || "模板";
-}
-
 function externalConnectionLabels(template: CanvasTemplateSummary): string[] {
   return Array.from(new Set(template.default_external_connections.map((connection) => connection.label).filter(Boolean)));
 }
@@ -432,35 +428,29 @@ export function TemplateGroupsPanel({
                 {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
               </button>
               <div className="min-w-0 flex-1 space-y-1.5 text-left">
-                <div className="flex min-w-0 items-center gap-2">
-                  <h3 className="truncate text-sm font-semibold text-zinc-950">
+                <div className="min-w-0">
+                  <h3 className="break-words text-sm font-semibold leading-5 text-zinc-950">
                     {template.title}
                   </h3>
-                  <span className="shrink-0 rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600">
-                    {summarizeScenario(template)}
-                  </span>
-                  <span className="shrink-0 rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">
-                    {isUserTemplate ? "自定义" : "内置"}
-                  </span>
-                  {template.kind === "full_canvas" ? (
-                    <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
-                      自动接商品
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-1">
+                  {isUserTemplate ? (
+                    <span className="rounded-sm border border-zinc-100 bg-zinc-50/70 px-1.5 py-0.5 text-[9px] font-medium text-zinc-400">
+                      自定义
                     </span>
                   ) : null}
-                </div>
-                <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                  <span className="max-w-[8.5rem] truncate rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                  <span className="max-w-full truncate rounded-sm border border-emerald-100 bg-emerald-50/60 px-1.5 py-0.5 text-[9px] font-medium text-emerald-600">
                     {summarizeOutput(template)}
                   </span>
                   {referenceLabel ? (
-                    <span className="max-w-[7rem] truncate rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">
+                    <span className="max-w-full truncate rounded-sm border border-zinc-100 bg-white px-1.5 py-0.5 text-[9px] font-medium text-zinc-400">
                       {referenceLabel}
                     </span>
                   ) : null}
                   {externalLabels.map((label) => (
                     <span
                       key={label}
-                      className="max-w-[6.5rem] truncate rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700"
+                      className="max-w-full truncate rounded-sm border border-indigo-100 bg-indigo-50/60 px-1.5 py-0.5 text-[9px] font-medium text-indigo-500"
                     >
                       {label}
                     </span>
