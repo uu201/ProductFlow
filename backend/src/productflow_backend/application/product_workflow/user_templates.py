@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from productflow_backend.application import product_workflow_graph
 from productflow_backend.application.canvas_templates import (
     CanvasTemplate,
     CanvasTemplateEdgeSpec,
@@ -16,7 +15,8 @@ from productflow_backend.application.canvas_templates import (
 )
 from productflow_backend.application.copy_payloads import normalize_copy_node_config
 from productflow_backend.application.image_generation_core import normalize_image_generation_tool_options
-from productflow_backend.application.product_workflow_context import image_size_from_config
+from productflow_backend.application.product_workflow import graph as product_workflow_graph
+from productflow_backend.application.product_workflow.context import image_size_from_config
 from productflow_backend.application.time import now_utc
 from productflow_backend.domain.enums import WorkflowNodeType
 from productflow_backend.domain.errors import BusinessValidationError, NotFoundError

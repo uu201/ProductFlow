@@ -118,12 +118,13 @@ The worktree baseline during review was recorded as clean by the Trellis PRD. Th
 Keep external APIs and database schema unchanged while splitting the file into low-risk modules under the same application package:
 
 ```text
-application/product_workflows.py              # keep public use-case facade, import submodules
-application/product_workflow_mutations.py     # node/edge/upload/bind/copy edit/delete
-application/product_workflow_runs.py          # kickoff, active run, enqueue failure, run history
-application/product_workflow_execution.py     # execute run/node, claim, failure transition
-application/product_workflow_context.py       # incoming context, product context, reference assets
-application/product_workflow_artifacts.py     # SourceAsset/PosterVariant/CopySet writeback and slot fill
+application/product_workflows.py              # keep public use-case facade, import owner modules
+application/product_workflow/mutations.py     # node/edge/upload/bind/copy edit/delete
+application/product_workflow/execution.py     # kickoff, active run, enqueue failure, node dispatch
+application/product_workflow/run_state.py     # node-run claim, failure/cancel transitions, capacity requeue
+application/product_workflow/image_generation.py  # image_generation node execution and provider timeout/failure handling
+application/product_workflow/context.py       # incoming context, product context, reference assets
+application/product_workflow/artifacts.py     # SourceAsset/PosterVariant/CopySet writeback and slot fill
 ```
 
 Move only one responsibility category at a time, keeping public function names and route imports unchanged. The first pass can extract `context` and `artifacts`, because they usually affect API entrypoints the least.
@@ -430,18 +431,25 @@ Move tests first without changing assertions. Optimize shared fixtures only afte
 
 ### Phase 3: Backend Workflow Modularization
 
-**Suggested tasks**
+**Status**
 
-1. Extract `product_workflow_context.py`: product context, incoming context, and reference asset input collection.
-2. Extract `product_workflow_artifacts.py`: copy/poster/source asset materialization and reference slot fill.
-3. Extract `product_workflow_execution.py`: node run claim, execute node/run, and failure transitions.
-4. Extract `product_workflow_mutations.py`: node/edge/upload/bind/copy edit/delete.
-5. Keep `product_workflows.py` as a facade until route imports stabilize, then reduce further.
+Implemented. Product workflow internals now live under `application/product_workflow/`, while
+`application/product_workflows.py` remains the public facade for route, worker, and schema imports.
+
+**Current modules**
+
+1. `product_workflow/context.py`: product context, incoming context, and reference asset input collection.
+2. `product_workflow/artifacts.py`: copy/poster/source asset materialization and reference slot fill.
+3. `product_workflow/execution.py`: workflow run kickoff/execution, selected-node planning, and node dispatch.
+4. `product_workflow/run_state.py`: node-run claim, failure/cancel transitions, safe failure reasons, and capacity requeue.
+5. `product_workflow/image_generation.py`: `image_generation` node execution, provider timeout/failure handling, and artifact fill.
+6. `product_workflow/mutations.py`: node/edge/upload/bind/copy edit/delete.
+7. `product_workflow/graph.py`, `query.py`, `templates.py`, and `user_templates.py`: graph/query/template owner modules.
 
 **Acceptance**
 
 - Public use-case names and HTTP API behavior remain unchanged.
-- `product_workflows.py` drops below 600 lines.
+- `product_workflows.py` remains a small facade and does not expose private helpers or provider factories.
 - `uv run --directory backend ruff check .` and `just backend-test` pass.
 - Workflow DAG tests still cover selected-node run, multi-target generation, reference fill, enqueue recovery, and duplicate message no-op.
 

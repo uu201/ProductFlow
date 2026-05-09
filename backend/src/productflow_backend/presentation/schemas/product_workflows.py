@@ -10,7 +10,7 @@ from productflow_backend.application.canvas_templates import (
     CanvasTemplateScenario,
     TemplateKind,
 )
-from productflow_backend.application.product_workflow_graph import ProductWorkflowStatusSnapshot
+from productflow_backend.application.product_workflow.graph import ProductWorkflowStatusSnapshot
 from productflow_backend.application.product_workflows import latest_workflow_runs
 from productflow_backend.domain.durable_generation_tasks import WORKFLOW_RUN_GENERATION_TASK_CONTRACT
 from productflow_backend.domain.enums import WorkflowNodeStatus, WorkflowNodeType, WorkflowRunStatus
@@ -463,7 +463,7 @@ def serialize_canvas_template_summary(template: CanvasTemplate) -> CanvasTemplat
 
 
 def serialize_user_canvas_template_summary(template: UserCanvasTemplate) -> CanvasTemplateSummaryResponse:
-    from productflow_backend.application.user_canvas_templates import user_canvas_template_to_canvas_template
+    from productflow_backend.application.product_workflow.user_templates import user_canvas_template_to_canvas_template
 
     return serialize_canvas_template_summary(user_canvas_template_to_canvas_template(template))
 

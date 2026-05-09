@@ -185,7 +185,7 @@ def test_workflow_run_endpoint_enqueues_durable_actor_and_reuses_active_run(
 
     sent_run_ids: list[str] = []
     monkeypatch.setattr(
-        "productflow_backend.application.product_workflow_execution.enqueue_workflow_run",
+        "productflow_backend.application.product_workflow.execution.enqueue_workflow_run",
         lambda run_id: sent_run_ids.append(run_id),
     )
 
@@ -234,7 +234,7 @@ def test_workflow_status_exposes_queue_metadata_and_action_flags(
     from productflow_backend.presentation.api import create_app
 
     monkeypatch.setattr(
-        "productflow_backend.application.product_workflow_execution.enqueue_workflow_run",
+        "productflow_backend.application.product_workflow.execution.enqueue_workflow_run",
         lambda run_id: None,
     )
     app = create_app()
@@ -277,7 +277,7 @@ def test_workflow_run_enqueue_failure_marks_run_failed(
     def fail_enqueue(_: str) -> None:
         raise RuntimeError("redis unavailable")
 
-    monkeypatch.setattr("productflow_backend.application.product_workflow_execution.enqueue_workflow_run", fail_enqueue)
+    monkeypatch.setattr("productflow_backend.application.product_workflow.execution.enqueue_workflow_run", fail_enqueue)
 
     app = create_app()
     client = TestClient(app)
@@ -314,11 +314,11 @@ def test_workflow_run_cancel_marks_active_run_cancelled_and_worker_noops(
     from productflow_backend.presentation.api import create_app
 
     monkeypatch.setattr(
-        "productflow_backend.application.product_workflow_execution.enqueue_workflow_run",
+        "productflow_backend.application.product_workflow.execution.enqueue_workflow_run",
         lambda run_id: None,
     )
     monkeypatch.setattr(
-        "productflow_backend.application.product_workflow_execution._execute_node",
+        "productflow_backend.application.product_workflow.execution._execute_node",
         lambda *args, **kwargs: pytest.fail("cancelled workflow run must no-op"),
     )
     app = create_app()
@@ -361,7 +361,7 @@ def test_workflow_run_retry_creates_new_run_from_failed_run_without_duplicate_ac
 
     sent_run_ids: list[str] = []
     monkeypatch.setattr(
-        "productflow_backend.application.product_workflow_execution.enqueue_workflow_run",
+        "productflow_backend.application.product_workflow.execution.enqueue_workflow_run",
         lambda run_id: sent_run_ids.append(run_id),
     )
     app = create_app()
@@ -492,7 +492,7 @@ def test_product_workflow_worker_defers_queued_run_when_global_running_capacity_
     configured_env: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from productflow_backend.application.product_workflow_execution import (
+    from productflow_backend.application.product_workflow.run_state import (
         PRODUCT_WORKFLOW_CAPACITY_RETRY_DELAY_MS,
     )
     from productflow_backend.application.product_workflows import (
@@ -538,11 +538,11 @@ def test_product_workflow_worker_defers_queued_run_when_global_running_capacity_
 
     delayed_requeues: list[tuple[str, int]] = []
     monkeypatch.setattr(
-        "productflow_backend.application.product_workflow_execution.enqueue_workflow_run_later",
+        "productflow_backend.application.product_workflow.run_state.enqueue_workflow_run_later",
         lambda run_id, *, delay_ms: delayed_requeues.append((run_id, delay_ms)),
     )
     monkeypatch.setattr(
-        "productflow_backend.application.product_workflow_execution._execute_node",
+        "productflow_backend.application.product_workflow.execution._execute_node",
         lambda *args, **kwargs: pytest.fail("capacity-blocked workflow run must not call provider"),
     )
 
@@ -574,7 +574,7 @@ def test_duplicate_workflow_messages_noop_for_terminal_or_running_runs(
     )
 
     monkeypatch.setattr(
-        "productflow_backend.application.product_workflow_execution._execute_node",
+        "productflow_backend.application.product_workflow.execution._execute_node",
         lambda *args, **kwargs: pytest.fail("duplicate message must not execute providers"),
     )
 
@@ -627,15 +627,17 @@ def test_workflow_image_generation_timeout_marks_run_node_and_queue_failed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from productflow_backend.application.admission import get_generation_queue_overview
+    from productflow_backend.application.product_workflow.image_generation import (
+        WORKFLOW_IMAGE_GENERATION_TIMEOUT_FAILURE,
+    )
     from productflow_backend.application.product_workflow_dependencies import WorkflowExecutionDependencies
-    from productflow_backend.application.product_workflow_execution import WORKFLOW_IMAGE_GENERATION_TIMEOUT_FAILURE
     from productflow_backend.application.product_workflows import run_product_workflow
 
     db_session.add(AppSetting(key="poster_generation_mode", value="generated"))
     db_session.commit()
     monkeypatch.setattr(
-        "productflow_backend.application.product_workflow_execution."
-        "_workflow_image_generation_provider_timeout_seconds",
+        "productflow_backend.application.product_workflow.image_generation."
+        "workflow_image_generation_provider_timeout_seconds",
         lambda: 0.01,
     )
 
@@ -695,8 +697,8 @@ def test_workflow_image_generation_provider_failure_uses_safe_reason(
     db_session,
     configured_env: Path,
 ) -> None:
+    from productflow_backend.application.product_workflow.image_generation import WORKFLOW_IMAGE_GENERATION_FAILURE
     from productflow_backend.application.product_workflow_dependencies import WorkflowExecutionDependencies
-    from productflow_backend.application.product_workflow_execution import WORKFLOW_IMAGE_GENERATION_FAILURE
     from productflow_backend.application.product_workflows import run_product_workflow
 
     db_session.add(AppSetting(key="poster_generation_mode", value="generated"))
@@ -840,7 +842,7 @@ def test_workflow_time_limit_exception_marks_running_node_failed(
 ) -> None:
     from dramatiq.middleware.time_limit import TimeLimitExceeded
 
-    from productflow_backend.application.product_workflow_execution import WORKFLOW_WORKER_TIMEOUT_FAILURE
+    from productflow_backend.application.product_workflow.run_state import WORKFLOW_WORKER_TIMEOUT_FAILURE
     from productflow_backend.application.product_workflows import (
         execute_product_workflow_run,
         start_product_workflow_run,
@@ -849,7 +851,7 @@ def test_workflow_time_limit_exception_marks_running_node_failed(
     def raise_time_limit(*args, **kwargs) -> dict:
         raise TimeLimitExceeded()
 
-    monkeypatch.setattr("productflow_backend.application.product_workflow_execution._execute_node", raise_time_limit)
+    monkeypatch.setattr("productflow_backend.application.product_workflow.execution._execute_node", raise_time_limit)
 
     product = create_product(
         db_session,

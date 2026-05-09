@@ -11,7 +11,7 @@ from productflow_backend.application.copy_payloads import (
     copy_payload_to_output,
     normalize_copy_payload,
 )
-from productflow_backend.application.product_workflow_context import optional_config_text
+from productflow_backend.application.product_workflow.context import optional_config_text
 from productflow_backend.application.time import now_utc
 from productflow_backend.domain.enums import (
     CopyStatus,

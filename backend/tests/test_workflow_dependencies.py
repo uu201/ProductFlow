@@ -6,11 +6,11 @@ from typing import Any
 import pytest
 
 from productflow_backend.application.contracts import PosterGenerationInput
+from productflow_backend.application.product_workflow.image_generation import generate_workflow_images_concurrently
 from productflow_backend.application.product_workflow_dependencies import (
     WorkflowExecutionDependencies,
     default_workflow_execution_dependencies,
 )
-from productflow_backend.application.product_workflow_execution import _generate_workflow_images_concurrently
 from productflow_backend.domain.enums import PosterKind
 
 
@@ -73,7 +73,7 @@ def test_workflow_image_generation_uses_injected_renderer_factory() -> None:
     font_path = Path("/tmp/productflow-injected-renderer.ttf")
     source_path = Path("/tmp/productflow-injected-source.png")
 
-    generated = _generate_workflow_images_concurrently(
+    generated = generate_workflow_images_concurrently(
         render_input=PosterGenerationInput(
             product_name="渲染注入测试",
             structured_copy_context="摘要：测试主标题\n卖点：卖点一\n卖点：卖点二\n卖点：卖点三",

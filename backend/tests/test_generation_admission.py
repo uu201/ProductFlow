@@ -40,7 +40,7 @@ def test_generation_cap_accepts_and_queues_workflow_run_creation(
 
     sent_run_ids: list[str] = []
     monkeypatch.setattr(
-        "productflow_backend.application.product_workflow_execution.enqueue_workflow_run",
+        "productflow_backend.application.product_workflow.execution.enqueue_workflow_run",
         lambda run_id: sent_run_ids.append(run_id),
     )
 

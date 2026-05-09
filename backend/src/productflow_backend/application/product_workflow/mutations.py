@@ -7,20 +7,20 @@ from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from productflow_backend.application import product_workflow_graph
 from productflow_backend.application.canvas_templates import CanvasTemplateNodeSpec
 from productflow_backend.application.image_generation_core import normalize_image_generation_tool_options
-from productflow_backend.application.product_workflow_artifacts import (
+from productflow_backend.application.product_workflow import graph as product_workflow_graph
+from productflow_backend.application.product_workflow.artifacts import (
     copy_node_output,
     fill_reference_node,
     image_asset_output,
     source_asset_for_poster_variant,
 )
-from productflow_backend.application.product_workflow_context import image_size_from_config, optional_config_text
-from productflow_backend.application.product_workflow_templates import materialize_canvas_template_graph
+from productflow_backend.application.product_workflow.context import image_size_from_config, optional_config_text
+from productflow_backend.application.product_workflow.templates import materialize_canvas_template_graph
+from productflow_backend.application.product_workflow.user_templates import get_canvas_template
 from productflow_backend.application.time import now_utc
 from productflow_backend.application.use_cases import update_copy_set
-from productflow_backend.application.user_canvas_templates import get_canvas_template
 from productflow_backend.domain.durable_generation_tasks import WORKFLOW_RUN_GENERATION_TASK_CONTRACT
 from productflow_backend.domain.enums import (
     SourceAssetKind,

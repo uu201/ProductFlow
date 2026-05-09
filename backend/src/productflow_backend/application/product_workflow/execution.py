@@ -2,66 +2,55 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from dramatiq.middleware.time_limit import TimeLimitExceeded
-from sqlalchemy import update
-from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from productflow_backend.application import product_workflow_graph
-from productflow_backend.application.admission import ensure_generation_capacity, generation_running_capacity_available
-from productflow_backend.application.contracts import PosterGenerationInput, ProductInput
+from productflow_backend.application.admission import ensure_generation_capacity
+from productflow_backend.application.contracts import ProductInput
 from productflow_backend.application.copy_payloads import (
-    copy_payload_context_text,
     normalize_copy_node_config,
     normalize_copy_payload,
 )
-from productflow_backend.application.image_generation_core import build_stored_image_reference_payload
-from productflow_backend.application.image_generation_failures import safe_image_generation_failure_reason
-from productflow_backend.application.product_workflow_artifacts import (
-    GeneratedWorkflowImage,
+from productflow_backend.application.product_workflow import graph as product_workflow_graph
+from productflow_backend.application.product_workflow.artifacts import (
     copy_node_output,
-    create_context_copy_set,
-    fill_reference_node,
     image_asset_output,
 )
-from productflow_backend.application.product_workflow_context import (
+from productflow_backend.application.product_workflow.context import (
     collect_incoming_context,
-    downstream_reference_nodes,
     effective_product_context,
     find_source_asset,
-    image_instruction_with_context,
-    image_size_from_config,
-    image_tool_options_from_config,
     instruction_with_upstream_text,
     optional_config_text,
-    poster_kind_from_config,
     product_context_values,
-    reference_assets_for_image_generation,
     reference_image_inputs_for_copy,
     source_asset_ids_from_config,
 )
+from productflow_backend.application.product_workflow.image_generation import (
+    execute_workflow_image_generation,
+)
+from productflow_backend.application.product_workflow.mutations import get_or_create_product_workflow
+from productflow_backend.application.product_workflow.query import WorkflowQueryService
+from productflow_backend.application.product_workflow.run_state import (
+    claim_workflow_node_run,
+    mark_workflow_run_cancelled,
+    mark_workflow_run_failed,
+    requeue_workflow_run_after_capacity_wait,
+    safe_workflow_failure_reason,
+)
 from productflow_backend.application.product_workflow_dependencies import (
-    PosterRendererFactory,
     WorkflowExecutionDependencies,
     default_workflow_execution_dependencies,
 )
-from productflow_backend.application.product_workflow_mutations import get_or_create_product_workflow
-from productflow_backend.application.product_workflow_query import WorkflowQueryService
 from productflow_backend.application.queue_submission import enqueue_or_mark_failed
 from productflow_backend.application.time import now_utc
-from productflow_backend.config import get_runtime_settings
 from productflow_backend.domain.durable_generation_tasks import WORKFLOW_RUN_GENERATION_TASK_CONTRACT
 from productflow_backend.domain.enums import (
     CopyStatus,
-    PosterKind,
-    SourceAssetKind,
     WorkflowNodeStatus,
     WorkflowNodeType,
     WorkflowRunStatus,
@@ -76,71 +65,17 @@ from productflow_backend.domain.workflow_rules import (
 from productflow_backend.infrastructure.db.models import (
     CopySet,
     CreativeBrief,
-    PosterVariant,
     Product,
     ProductWorkflow,
-    SourceAsset,
     WorkflowNode,
     WorkflowNodeRun,
     WorkflowRun,
 )
 from productflow_backend.infrastructure.db.session import get_session_factory
-from productflow_backend.infrastructure.image.base import ImageProvider, infer_extension
-from productflow_backend.infrastructure.queue import enqueue_workflow_run, enqueue_workflow_run_later
+from productflow_backend.infrastructure.queue import enqueue_workflow_run
 from productflow_backend.infrastructure.storage import LocalStorage
 
 logger = logging.getLogger(__name__)
-WORKFLOW_IMAGE_GENERATION_FAILURE = "图片生成失败，请稍后重试"
-WORKFLOW_IMAGE_GENERATION_TIMEOUT_FAILURE = "图片生成超时，请稍后重试"
-WORKFLOW_WORKER_TIMEOUT_FAILURE = "工作流执行超时，请稍后重试"
-WORKFLOW_CANCELLED_REASON = "已取消"
-PRODUCT_WORKFLOW_CAPACITY_RETRY_DELAY_MS = 2000
-
-
-class WorkflowSafeExecutionError(RuntimeError):
-    """Execution failure whose string is safe to persist and show to users."""
-
-    def __init__(self, safe_message: str) -> None:
-        super().__init__(safe_message)
-        self.safe_message = safe_message
-
-
-class WorkflowImageGenerationTimeoutError(WorkflowSafeExecutionError):
-    """Raised when workflow image provider calls exceed the project timeout boundary."""
-
-
-class WorkflowImageGenerationProviderError(WorkflowSafeExecutionError):
-    """Raised when workflow image provider failures must be hidden behind a safe user message."""
-
-
-def _safe_workflow_failure_reason(exc: BaseException) -> str:
-    if isinstance(exc, TimeLimitExceeded):
-        return WORKFLOW_WORKER_TIMEOUT_FAILURE
-    if isinstance(exc, WorkflowSafeExecutionError):
-        return exc.safe_message
-    return str(exc)
-
-
-def _workflow_image_generation_provider_timeout_seconds() -> float:
-    return float(get_runtime_settings().workflow_image_generation_provider_timeout_seconds)
-
-
-def _call_with_timeout[T](call: Callable[[], T], *, timeout_seconds: float, timeout_message: str) -> T:
-    executor = ThreadPoolExecutor(max_workers=1)
-    future = executor.submit(call)
-    try:
-        result = future.result(timeout=timeout_seconds)
-    except FuturesTimeoutError as exc:
-        future.cancel()
-        executor.shutdown(wait=False, cancel_futures=True)
-        raise WorkflowImageGenerationTimeoutError(timeout_message) from exc
-    except BaseException:
-        future.cancel()
-        executor.shutdown(wait=False, cancel_futures=True)
-        raise
-    else:
-        executor.shutdown(wait=True)
-        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,12 +84,6 @@ class WorkflowRunKickoff:
     run_id: str
     created: bool
     should_enqueue: bool
-
-
-@dataclass(frozen=True, slots=True)
-class _WorkflowNodeRunClaimResult:
-    claimed: bool
-    should_requeue: bool = False
 
 
 def _active_workflow_run(workflow: ProductWorkflow) -> WorkflowRun | None:
@@ -330,7 +259,7 @@ def cancel_product_workflow_run(
         return product_workflow_graph.get_workflow_or_raise(session, workflow.id)
     if run.status in {WorkflowRunStatus.SUCCEEDED, WorkflowRunStatus.FAILED}:
         raise BusinessValidationError("已结束的工作流运行不能取消")
-    _mark_workflow_run_cancelled(session, run_id=run.id)
+    mark_workflow_run_cancelled(session, run_id=run.id)
     session.expire_all()
     return product_workflow_graph.get_workflow_or_raise(session, workflow.id)
 
@@ -379,19 +308,19 @@ def execute_product_workflow_run(
             _execute_product_workflow_run(session, run_id=run_id, dependencies=dependencies)
         except TimeLimitExceeded as exc:
             session.rollback()
-            _mark_workflow_run_failed(
+            mark_workflow_run_failed(
                 session,
                 run_id=run_id,
                 failed_node_id=None,
-                reason=_safe_workflow_failure_reason(exc)[:1000],
+                reason=safe_workflow_failure_reason(exc)[:1000],
             )
         except Exception as exc:  # noqa: BLE001
             session.rollback()
-            _mark_workflow_run_failed(
+            mark_workflow_run_failed(
                 session,
                 run_id=run_id,
                 failed_node_id=None,
-                reason=_safe_workflow_failure_reason(exc)[:1000],
+                reason=safe_workflow_failure_reason(exc)[:1000],
             )
     finally:
         session.close()
@@ -400,7 +329,7 @@ def execute_product_workflow_run(
 def mark_workflow_run_enqueue_failed(session: Session, *, run_id: str, reason: str) -> None:
     """Mark a just-created workflow run failed when its durable queue message cannot be sent."""
 
-    _mark_workflow_run_failed(
+    mark_workflow_run_failed(
         session,
         run_id=run_id,
         failed_node_id=None,
@@ -444,10 +373,10 @@ def _execute_product_workflow_run(
             return
         if not WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_queued(node_run.status):
             continue
-        claim = _claim_workflow_node_run(session, node_run_id=node_run.id, node_id=node.id)
+        claim = claim_workflow_node_run(session, node_run_id=node_run.id, node_id=node.id)
         if not claim.claimed:
             if claim.should_requeue:
-                _requeue_workflow_run_after_capacity_wait(run_id)
+                requeue_workflow_run_after_capacity_wait(run_id)
             return
         node = queries.get_node_or_raise(ordered_node.id)
         node_run = session.get(WorkflowNodeRun, node_run.id)
@@ -463,20 +392,20 @@ def _execute_product_workflow_run(
             output = _execute_node(session, workflow_id=workflow.id, node=node, dependencies=dependencies)
         except TimeLimitExceeded as exc:
             session.rollback()
-            _mark_workflow_run_failed(
+            mark_workflow_run_failed(
                 session,
                 run_id=run_id,
                 failed_node_id=ordered_node.id,
-                reason=_safe_workflow_failure_reason(exc)[:1000],
+                reason=safe_workflow_failure_reason(exc)[:1000],
             )
             return
         except Exception as exc:  # noqa: BLE001
             session.rollback()
-            _mark_workflow_run_failed(
+            mark_workflow_run_failed(
                 session,
                 run_id=run_id,
                 failed_node_id=ordered_node.id,
-                reason=_safe_workflow_failure_reason(exc)[:1000],
+                reason=safe_workflow_failure_reason(exc)[:1000],
             )
             return
 
@@ -517,123 +446,6 @@ def _execute_product_workflow_run(
         persisted_run.status = WorkflowRunStatus.SUCCEEDED
         persisted_run.finished_at = now_utc()
         logger.info("工作流运行成功: run_id=%s workflow_id=%s", run_id, persisted_run.workflow_id)
-    session.commit()
-
-
-def _claim_workflow_node_run(session: Session, *, node_run_id: str, node_id: str) -> _WorkflowNodeRunClaimResult:
-    """Atomically claim one queued node run so duplicate Dramatiq messages do not execute it twice."""
-
-    now = now_utc()
-    if not generation_running_capacity_available(session):
-        session.commit()
-        return _WorkflowNodeRunClaimResult(claimed=False, should_requeue=True)
-    result = cast(
-        CursorResult[Any],
-        session.execute(
-            update(WorkflowNodeRun)
-            .where(
-                WorkflowNodeRun.id == node_run_id,
-                WorkflowNodeRun.status == WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_queued_statuses[0],
-            )
-            .values(status=WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_running_statuses[0], started_at=now)
-        )
-    )
-    if result.rowcount != 1:
-        session.rollback()
-        return _WorkflowNodeRunClaimResult(claimed=False)
-    session.execute(
-        update(WorkflowNode)
-        .where(WorkflowNode.id == node_id)
-        .values(status=WorkflowNodeStatus.RUNNING, failure_reason=None, last_run_at=now)
-    )
-    session.commit()
-    return _WorkflowNodeRunClaimResult(claimed=True)
-
-
-def _requeue_workflow_run_after_capacity_wait(run_id: str) -> None:
-    try:
-        enqueue_workflow_run_later(run_id, delay_ms=PRODUCT_WORKFLOW_CAPACITY_RETRY_DELAY_MS)
-    except Exception:  # noqa: BLE001
-        logger.exception("商品工作流等待并发容量后重新入队失败: workflow_run_id=%s", run_id)
-
-
-def _mark_workflow_run_failed(
-    session: Session,
-    *,
-    run_id: str,
-    failed_node_id: str | None,
-    reason: str,
-) -> None:
-    persisted_run = session.get(WorkflowRun, run_id)
-    if persisted_run is None:
-        return
-    if WORKFLOW_RUN_GENERATION_TASK_CONTRACT.is_terminal(persisted_run.status):
-        return
-    now = now_utc()
-    if failed_node_id is not None:
-        failed_node = product_workflow_graph.get_node_or_raise(session, failed_node_id)
-        failed_node.status = WorkflowNodeStatus.FAILED
-        failed_node.failure_reason = reason
-        failed_node.last_run_at = now
-    for node_run in persisted_run.node_runs:
-        if node_run.node_id == failed_node_id:
-            node_run.status = WorkflowNodeStatus.FAILED
-            node_run.failure_reason = reason
-            node_run.finished_at = now
-        elif failed_node_id is None and WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_running(node_run.status):
-            failed_node = session.get(WorkflowNode, node_run.node_id)
-            if failed_node is not None:
-                failed_node.status = WorkflowNodeStatus.FAILED
-                failed_node.failure_reason = reason
-                failed_node.last_run_at = now
-            node_run.status = WorkflowNodeStatus.FAILED
-            node_run.failure_reason = reason
-            node_run.finished_at = now
-        elif WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_queued(node_run.status):
-            skipped_node = session.get(WorkflowNode, node_run.node_id)
-            if skipped_node is not None:
-                skipped_node.status = WorkflowNodeStatus.IDLE
-                skipped_node.failure_reason = None
-            node_run.status = WorkflowNodeStatus.FAILED
-            node_run.failure_reason = "上游节点失败"
-            node_run.finished_at = now
-    logger.warning("工作流运行失败: run_id=%s failed_node_id=%s reason=%s", run_id, failed_node_id, reason)
-    persisted_run.status = WorkflowRunStatus.FAILED
-    persisted_run.failure_reason = reason
-    persisted_run.finished_at = now
-    persisted_run.workflow.updated_at = now
-    session.commit()
-
-
-def _mark_workflow_run_cancelled(session: Session, *, run_id: str) -> None:
-    persisted_run = session.get(WorkflowRun, run_id)
-    if persisted_run is None:
-        return
-    if WORKFLOW_RUN_GENERATION_TASK_CONTRACT.is_terminal(persisted_run.status):
-        return
-    now = now_utc()
-    for node_run in persisted_run.node_runs:
-        if WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_queued(node_run.status):
-            skipped_node = session.get(WorkflowNode, node_run.node_id)
-            if skipped_node is not None:
-                skipped_node.status = WorkflowNodeStatus.IDLE
-                skipped_node.failure_reason = None
-            node_run.status = WorkflowNodeStatus.FAILED
-            node_run.failure_reason = WORKFLOW_CANCELLED_REASON
-            node_run.finished_at = now
-        elif WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_running(node_run.status):
-            running_node = session.get(WorkflowNode, node_run.node_id)
-            if running_node is not None:
-                running_node.status = WorkflowNodeStatus.FAILED
-                running_node.failure_reason = WORKFLOW_CANCELLED_REASON
-                running_node.last_run_at = now
-            node_run.status = WorkflowNodeStatus.FAILED
-            node_run.failure_reason = WORKFLOW_CANCELLED_REASON
-            node_run.finished_at = now
-    persisted_run.status = WorkflowRunStatus.CANCELLED
-    persisted_run.failure_reason = WORKFLOW_CANCELLED_REASON
-    persisted_run.finished_at = now
-    persisted_run.workflow.updated_at = now
     session.commit()
 
 
@@ -785,7 +597,7 @@ def _execute_node(
     if node.node_type == WorkflowNodeType.COPY_GENERATION:
         return _execute_copy_generation(session, workflow=workflow, node=node, dependencies=dependencies)
     if node.node_type == WorkflowNodeType.IMAGE_GENERATION:
-        return _execute_image_generation(session, workflow=workflow, node=node, dependencies=dependencies)
+        return execute_workflow_image_generation(session, workflow=workflow, node=node, dependencies=dependencies)
     raise BusinessValidationError("工作流节点类型不支持")
 
 
@@ -911,232 +723,3 @@ def _generate_copy_with_provider(
         reference_images=reference_images,
     )
     return normalize_copy_payload(copy_payload.model_dump(mode="json"), fallback_purpose=config.purpose), model_name
-
-
-def _execute_image_generation(
-    session: Session,
-    *,
-    workflow: ProductWorkflow,
-    node: WorkflowNode,
-    dependencies: WorkflowExecutionDependencies | None = None,
-) -> dict[str, Any]:
-    dependencies = dependencies or default_workflow_execution_dependencies()
-    product = workflow.product
-    incoming_context = collect_incoming_context(workflow, node.id, include_transitive_product_context=True)
-    product_context = effective_product_context(workflow, node.id, include_transitive=True)
-    downstream_nodes = downstream_reference_nodes(workflow, node.id)
-    if not downstream_nodes:
-        raise BusinessValidationError("请先把生图节点连接到至少一个图片/参考图节点，再运行图片生成")
-
-    linked_copy_set_id = optional_config_text(node.config_json, "copy_set_id") or incoming_context.copy_set_id
-    copy_set = session.get(CopySet, linked_copy_set_id) if linked_copy_set_id else None
-    has_linked_copy_input = (
-        linked_copy_set_id is not None and copy_set is not None and copy_set.product_id == product.id
-    )
-    if copy_set is None or copy_set.product_id != product.id:
-        copy_set = create_context_copy_set(session, product=product, product_context=product_context, node=node)
-    structured_copy_context = None
-    if isinstance(copy_set.structured_payload, dict):
-        try:
-            structured_copy_context = copy_payload_context_text(normalize_copy_payload(copy_set.structured_payload))
-        except ValueError:
-            structured_copy_context = None
-
-    storage = LocalStorage()
-    reference_assets = reference_assets_for_image_generation(
-        session,
-        workflow,
-        incoming_context.image_asset_ids,
-        incoming_context.poster_variant_ids,
-    )
-    reference_payload = build_stored_image_reference_payload(
-        reference_assets,
-        resolve_storage_path=storage.resolve,
-    )
-    render_input = PosterGenerationInput(
-        copy_prompt_mode="copy" if has_linked_copy_input else "image_edit",
-        product_name=product_context["name"] or "",
-        category=product_context["category"],
-        price=product_context["price"],
-        source_note=product_context["source_note"],
-        instruction=image_instruction_with_context(node, incoming_context.text_contexts),
-        image_size=image_size_from_config(node.config_json),
-        tool_options=image_tool_options_from_config(node.config_json),
-        structured_copy_context=structured_copy_context,
-        source_image=reference_payload.source_image,
-        reference_images=reference_payload.reference_images,
-    )
-    poster_ids: list[str] = []
-    filled_source_asset_ids: list[str] = []
-    filled_reference_node_ids: list[str] = []
-    settings = get_runtime_settings()
-    kind = poster_kind_from_config(node.config_json)
-    image_providers = (
-        [dependencies.image_provider() for _ in downstream_nodes]
-        if settings.poster_generation_mode == "generated"
-        else None
-    )
-    generated_images = _generate_workflow_images_concurrently(
-        render_input=render_input,
-        kind=kind,
-        target_count=len(downstream_nodes),
-        poster_generation_mode=settings.poster_generation_mode,
-        poster_font_path=settings.poster_font_path,
-        image_providers=image_providers,
-        renderer_factory=dependencies.poster_renderer,
-    )
-    for generated_image, target_node in zip(generated_images, downstream_nodes, strict=True):
-        content = generated_image.content
-        mime_type = generated_image.mime_type
-        relative_path = storage.save_generated_image(
-            product.id,
-            f"workflow-{kind.value}-{generated_image.target_index}",
-            content,
-            suffix=infer_extension(mime_type),
-        )
-        poster = PosterVariant(
-            product_id=product.id,
-            copy_set_id=copy_set.id,
-            kind=kind,
-            template_name=generated_image.template_name,
-            storage_path=relative_path,
-            mime_type=mime_type,
-            width=generated_image.width,
-            height=generated_image.height,
-        )
-        session.add(poster)
-        session.flush()
-        poster_ids.append(poster.id)
-
-        filename = f"reference-{generated_image.target_index}{infer_extension(mime_type)}"
-        reference_path = storage.save_reference_upload(product.id, filename, content)
-        asset = SourceAsset(
-            product_id=product.id,
-            kind=SourceAssetKind.REFERENCE_IMAGE,
-            original_filename=filename,
-            mime_type=mime_type,
-            storage_path=reference_path,
-            source_poster_variant_id=poster.id,
-        )
-        session.add(asset)
-        session.flush()
-        filled_source_asset_ids.append(asset.id)
-        filled_reference_node_ids.append(target_node.id)
-        fill_reference_node(target_node, asset, source_poster_variant_id=poster.id)
-    product.updated_at = now_utc()
-    return {
-        "copy_set_id": copy_set.id,
-        "generated_poster_variant_ids": poster_ids,
-        "filled_source_asset_ids": filled_source_asset_ids,
-        "filled_reference_node_ids": filled_reference_node_ids,
-        "target_count": len(downstream_nodes),
-        "size": image_size_from_config(node.config_json),
-        "instruction": optional_config_text(node.config_json, "instruction"),
-        "context_summary": {
-            "product_context": product_context,
-            "copy_set_id": copy_set.id,
-            "copy_prompt_mode": render_input.copy_prompt_mode,
-            "upstream_text_count": len(incoming_context.text_contexts),
-            "reference_image_count": len(incoming_context.image_asset_ids),
-            "poster_variant_count": len(incoming_context.poster_variant_ids),
-        },
-        "context_sources": incoming_context.text_sources[:8],
-        "summary": f"已填充 {len(filled_reference_node_ids)} 个参考图",
-    }
-
-
-def _generate_workflow_images_concurrently(
-    *,
-    render_input: PosterGenerationInput,
-    kind: PosterKind,
-    target_count: int,
-    poster_generation_mode: str,
-    poster_font_path: Path,
-    image_providers: list[ImageProvider] | None,
-    renderer_factory: PosterRendererFactory | None = None,
-) -> list[GeneratedWorkflowImage]:
-    if target_count <= 0:
-        return []
-    dependencies = default_workflow_execution_dependencies()
-    renderer_factory = renderer_factory or dependencies.poster_renderer
-
-    def generate_one(target_index: int) -> GeneratedWorkflowImage:
-        if poster_generation_mode == "generated":
-            if image_providers is None:
-                raise RuntimeError("图片生成供应商未初始化")
-            image_provider = image_providers[target_index - 1]
-            try:
-                generated_image, image_model = image_provider.generate_poster_image(render_input, kind)
-            except TimeLimitExceeded:
-                raise
-            except WorkflowSafeExecutionError:
-                raise
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    (
-                        "工作流图片供应商生成失败: target_index=%s provider=%s model=%s "
-                        "copy_prompt_mode=%s exception_class=%s"
-                    ),
-                    target_index,
-                    getattr(image_provider, "provider_name", None),
-                    getattr(image_provider, "model", None),
-                    render_input.copy_prompt_mode,
-                    type(exc).__name__,
-                )
-                raise WorkflowImageGenerationProviderError(
-                    safe_image_generation_failure_reason(exc, generic_message=WORKFLOW_IMAGE_GENERATION_FAILURE)
-                ) from exc
-            return GeneratedWorkflowImage(
-                target_index=target_index,
-                content=generated_image.bytes_data,
-                width=generated_image.width,
-                height=generated_image.height,
-                template_name=f"workflow:{image_provider.provider_name}:{generated_image.variant_label}:{image_model}",
-                mime_type=generated_image.mime_type,
-            )
-
-        renderer = renderer_factory(poster_font_path)
-        return GeneratedWorkflowImage(
-            target_index=target_index,
-            content=renderer.render(render_input, kind),
-            width=1080,
-            height=1080 if kind == PosterKind.MAIN_IMAGE else 1440,
-            template_name=f"workflow:{'default-main' if kind == PosterKind.MAIN_IMAGE else 'default-promo'}",
-            mime_type="image/png",
-        )
-
-    if target_count == 1:
-        if poster_generation_mode == "generated":
-            return [
-                _call_with_timeout(
-                    lambda: generate_one(1),
-                    timeout_seconds=_workflow_image_generation_provider_timeout_seconds(),
-                    timeout_message=WORKFLOW_IMAGE_GENERATION_TIMEOUT_FAILURE,
-                )
-            ]
-        return [generate_one(1)]
-    executor = ThreadPoolExecutor(max_workers=target_count)
-    futures = {executor.submit(generate_one, target_index): target_index for target_index in range(1, target_count + 1)}
-    results: dict[int, GeneratedWorkflowImage] = {}
-    try:
-        timeout = (
-            _workflow_image_generation_provider_timeout_seconds()
-            if poster_generation_mode == "generated"
-            else None
-        )
-        for future in as_completed(futures, timeout=timeout):
-            target_index = futures[future]
-            results[target_index] = future.result()
-    except FuturesTimeoutError as exc:
-        for future in futures:
-            future.cancel()
-        executor.shutdown(wait=False, cancel_futures=True)
-        raise WorkflowImageGenerationTimeoutError(WORKFLOW_IMAGE_GENERATION_TIMEOUT_FAILURE) from exc
-    except BaseException:
-        for future in futures:
-            future.cancel()
-        executor.shutdown(wait=False, cancel_futures=True)
-        raise
-    else:
-        executor.shutdown(wait=True)
-    return [results[target_index] for target_index in range(1, target_count + 1)]

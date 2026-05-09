@@ -82,6 +82,6 @@ def _execute_workflow_queue_inline(
         execute_product_workflow_run(run_id, dependencies=dependencies)
 
     monkeypatch.setattr(
-        "productflow_backend.application.product_workflow_execution.enqueue_workflow_run",
+        "productflow_backend.application.product_workflow.execution.enqueue_workflow_run",
         execute_inline,
     )

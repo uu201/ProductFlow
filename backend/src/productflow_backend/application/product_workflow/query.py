@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from productflow_backend.application import product_workflow_graph
+from productflow_backend.application.product_workflow import graph as product_workflow_graph
 from productflow_backend.infrastructure.db.models import (
     CopySet,
     PosterVariant,

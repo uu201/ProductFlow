@@ -36,6 +36,18 @@ backend/
 │   ├── application/
 │   │   ├── contracts.py                 # Pydantic contracts between use cases and providers/renderers
 │   │   ├── image_sessions.py            # continuous image-session use cases
+│   │   ├── product_workflows.py          # stable facade for route/worker product workflow imports
+│   │   ├── product_workflow/             # product workflow internals split by owner module
+│   │   │   ├── artifacts.py              # workflow artifact materialization and summaries
+│   │   │   ├── context.py                # product/upstream/reference execution context helpers
+│   │   │   ├── execution.py              # workflow run kickoff/execution and node dispatch
+│   │   │   ├── graph.py                  # workflow graph loading, defaults, lookup, ordering
+│   │   │   ├── image_generation.py       # image_generation node executor
+│   │   │   ├── mutations.py              # workflow graph/edit use cases
+│   │   │   ├── query.py                  # narrow workflow query service for execution hot paths
+│   │   │   ├── run_state.py              # workflow run/node-run state transitions
+│   │   │   ├── templates.py              # canvas template materialization helpers
+│   │   │   └── user_templates.py         # user-saved canvas template use cases
 │   │   ├── queue_submission.py           # durable task enqueue failure handling helper
 │   │   └── use_cases.py                 # product/copy/poster workflow use cases
 │   ├── presentation/
@@ -106,28 +118,37 @@ Put workflow rules and orchestration in `backend/src/productflow_backend/applica
 - `application/time.py` is the shared application timestamp helper for timezone-aware UTC values.
 - `application/queue_submission.py` owns the small shared helper for "durable row persisted, queue delivery failed"
   handling. Submit use cases use it to mark the persisted task failed and raise `QueueUnavailableError`.
-- `application/product_workflow_graph.py` owns product workflow graph loading, default graph templates, lookup helpers,
-  topological ordering, and latest-run ordering. Keep these graph/query concerns out of
-  `application/product_workflows.py`, which owns mutations and execution orchestration.
 - Product workflow application logic is split by executable boundary:
   - `application/product_workflows.py` is the stable facade for route/queue/worker imports. Keep existing public use-case
     names available there while implementations live in cohesive submodules. Do not export private `_...` helpers or
     provider factory helpers through this facade.
-  - `application/product_workflow_mutations.py` owns workflow graph/edit use cases: create/update/delete nodes and edges,
+  - `application/product_workflow/graph.py` owns product workflow graph loading, default graph templates, lookup helpers,
+    topological ordering, and latest-run ordering. Keep these graph/query concerns out of
+    `application/product_workflows.py`.
+  - `application/product_workflow/mutations.py` owns workflow graph/edit use cases: create/update/delete nodes and edges,
     upload/bind reference images, edit generated copy, and normalize the product-context singleton.
-  - `application/product_workflow_execution.py` owns workflow run kickoff/execution, node-run claiming, failure
-    transitions, selected-node planning, and provider/render orchestration.
-  - `application/product_workflow_query.py` is the narrow workflow query-service trial for execution/reuse hot paths
+  - `application/product_workflow/execution.py` owns workflow run kickoff/execution, selected-node planning, and node
+    dispatch. Keep node-specific provider/render orchestration in cohesive owner modules instead of growing this file
+    back into a full execution monolith.
+  - `application/product_workflow/run_state.py` owns workflow run/node-run state transitions: atomic node-run claiming,
+    run failure/cancel marking, capacity-wait requeue scheduling, and safe workflow failure reasons.
+  - `application/product_workflow/image_generation.py` owns the `image_generation` node executor, including generated
+    poster/reference artifact creation, provider failure sanitization, provider timeouts, and concurrent render/provider
+    calls.
+  - `application/product_workflow/query.py` is the narrow workflow query-service trial for execution/reuse hot paths
     such as run reloads, node/edge lookups, source-asset existence checks, and first-class artifact lookup. Do not broaden
     this into whole-project repository conversion without a dedicated architecture task.
   - `application/product_workflow_dependencies.py` owns explicit workflow execution dependency seams for text/image
     provider resolution and poster renderer construction. Default resolvers call the infrastructure provider factories
     directly; tests that need fake providers should pass `WorkflowExecutionDependencies` rather than patching the
     `product_workflows.py` facade.
-  - `application/product_workflow_context.py` owns product/incoming context collection, config parsing, upstream text
+  - `application/product_workflow/context.py` owns product/incoming context collection, config parsing, upstream text
     assembly, reference input collection, and downstream reference target discovery.
-  - `application/product_workflow_artifacts.py` owns workflow artifact summaries and materialization helpers such as
+  - `application/product_workflow/artifacts.py` owns workflow artifact summaries and materialization helpers such as
     workflow-local copy sets, reference slot fill, generated image records, and poster-to-reference source lookup.
+  - `application/product_workflow/templates.py` owns canvas template graph materialization helpers.
+  - `application/product_workflow/user_templates.py` owns user-saved canvas template create/list/rename/archive/apply
+    use cases.
   Avoid importing submodules through the facade from inside other submodules; prefer direct submodule imports to prevent
   circular dependencies.
 

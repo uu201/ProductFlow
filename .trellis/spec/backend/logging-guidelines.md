@@ -22,7 +22,8 @@ Current observability files and mechanisms:
   and continuous image-session generation tasks, then clears it when the actor returns or raises.
 - `backend/src/productflow_backend/workers.py` persists async workflow and continuous image generation state through
   application use cases rather than logging retry state only.
-- `backend/src/productflow_backend/application/product_workflow_execution.py` updates `WorkflowRun` /
+- `backend/src/productflow_backend/application/product_workflow/execution.py` and
+  `backend/src/productflow_backend/application/product_workflow/run_state.py` update `WorkflowRun` /
   `WorkflowNodeRun` status and failure fields.
 - `backend/src/productflow_backend/application/image_sessions.py` updates `ImageSessionGenerationTask` status,
   failure, attempt, queue, and result fields.

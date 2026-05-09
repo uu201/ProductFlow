@@ -4,10 +4,10 @@ import pytest
 from fastapi import HTTPException
 from helpers import _make_demo_image_bytes
 
-from productflow_backend.application import product_workflow_graph
 from productflow_backend.application.image_sessions import create_image_session, submit_image_session_generation_task
-from productflow_backend.application.product_workflow_context import poster_kind_from_config
-from productflow_backend.application.product_workflow_mutations import (
+from productflow_backend.application.product_workflow import graph as product_workflow_graph
+from productflow_backend.application.product_workflow.context import poster_kind_from_config
+from productflow_backend.application.product_workflow.mutations import (
     create_workflow_edge,
     create_workflow_node,
     get_or_create_product_workflow,

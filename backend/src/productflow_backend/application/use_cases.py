@@ -7,7 +7,7 @@ from sqlalchemy import desc, exists, func, literal, select
 from sqlalchemy.orm import Session, selectinload
 
 from productflow_backend.application.copy_payloads import normalize_copy_payload
-from productflow_backend.application.product_workflow_templates import (
+from productflow_backend.application.product_workflow.templates import (
     materialize_product_workflow_from_template,
     resolve_product_creation_canvas_template,
 )

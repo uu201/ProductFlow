@@ -201,7 +201,7 @@ or byte-size checks in individual route handlers.
 
 Application submit use cases create durable work first, then enqueue through `infrastructure/queue.py`:
 
-- `application/product_workflow_execution.py::submit_product_workflow_run(...)` creates/reuses `WorkflowRun` rows,
+- `application/product_workflow/execution.py::submit_product_workflow_run(...)` creates/reuses `WorkflowRun` rows,
   enqueues when `_workflow_run_should_enqueue(...)` says delivery is needed, and marks enqueue failures through
   `mark_workflow_run_enqueue_failed(...)`.
 - `application/image_sessions.py::submit_image_session_generation_task(...)` creates the

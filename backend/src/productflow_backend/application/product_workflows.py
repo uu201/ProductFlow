@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from productflow_backend.application import product_workflow_graph
-from productflow_backend.application.product_workflow_execution import (
+from typing import TYPE_CHECKING
+
+from productflow_backend.application.product_workflow.execution import (
     WorkflowRunKickoff,
     cancel_product_workflow_run,
     execute_product_workflow_run,
@@ -11,7 +12,13 @@ from productflow_backend.application.product_workflow_execution import (
     start_product_workflow_run,
     submit_product_workflow_run,
 )
-from productflow_backend.application.product_workflow_mutations import (
+from productflow_backend.application.product_workflow.graph import (
+    get_active_workflow_status as _get_active_workflow_status,
+)
+from productflow_backend.application.product_workflow.graph import (
+    latest_workflow_runs as _latest_workflow_runs,
+)
+from productflow_backend.application.product_workflow.mutations import (
     apply_node_group_template_to_workflow,
     bind_workflow_node_image,
     create_workflow_edge,
@@ -23,21 +30,24 @@ from productflow_backend.application.product_workflow_mutations import (
     update_workflow_node,
     upload_workflow_node_image,
 )
-from productflow_backend.application.user_canvas_templates import (
+from productflow_backend.application.product_workflow.user_templates import (
     archive_user_canvas_template,
     create_user_canvas_template_from_workflow_nodes,
     list_canvas_templates,
     rename_user_canvas_template,
 )
-from productflow_backend.infrastructure.db.models import ProductWorkflow, WorkflowRun
+
+if TYPE_CHECKING:
+    from productflow_backend.application.product_workflow.graph import ProductWorkflowStatusSnapshot
+    from productflow_backend.infrastructure.db.models import ProductWorkflow, WorkflowRun
 
 
 def latest_workflow_runs(workflow: ProductWorkflow, limit: int = 10) -> list[WorkflowRun]:
-    return product_workflow_graph.latest_workflow_runs(workflow, limit=limit)
+    return _latest_workflow_runs(workflow, limit=limit)
 
 
-def get_product_workflow_status(session, product_id: str) -> product_workflow_graph.ProductWorkflowStatusSnapshot:
-    return product_workflow_graph.get_active_workflow_status(session, product_id)
+def get_product_workflow_status(session, product_id: str) -> ProductWorkflowStatusSnapshot:
+    return _get_active_workflow_status(session, product_id)
 
 
 __all__ = [
