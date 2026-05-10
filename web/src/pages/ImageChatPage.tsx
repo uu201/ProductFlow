@@ -1052,7 +1052,7 @@ export function ImageChatPage() {
             </div>
 
             <div className="relative flex min-h-[320px] flex-1 items-center justify-center overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm max-h-[72vh] lg:min-h-[360px] lg:max-h-none">
-              <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:20px_20px]" />
+              <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:20px_20px] dark:bg-[radial-gradient(rgba(148,163,184,0.42)_1px,transparent_1px)]" />
               <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-3 px-5 py-4">
                 {selectedRound ? (
                   <div className="min-w-0 max-w-[calc(100%-5.5rem)] truncate rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 backdrop-blur">
@@ -1100,12 +1100,12 @@ export function ImageChatPage() {
                   t={t}
                 />
               ) : (
-                <div className="relative z-0 flex flex-col items-center gap-4 text-center text-slate-400">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-white shadow-sm ring-1 ring-slate-200">
+                <div className="relative z-0 flex flex-col items-center gap-4 text-center text-slate-400 dark:text-slate-100">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-950/90 dark:text-slate-100 dark:ring-slate-600">
                     <Sparkles size={28} />
                   </div>
                   <div>
-                    <div className="text-sm font-semibold text-slate-600">{t("chat.noResult")}</div>
+                    <div className="text-sm font-semibold text-slate-600 dark:text-white">{t("chat.noResult")}</div>
                   </div>
                 </div>
               )}
