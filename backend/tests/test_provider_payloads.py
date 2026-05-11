@@ -210,6 +210,37 @@ def test_prompt_settings_reach_provider_prompt_builders(configured_env: Path, mo
     assert "用户：先做一个主图" in chat_prompt
     assert chat_prompt.endswith("改成白底")
 
+
+def test_openai_text_provider_reads_sse_text_response() -> None:
+    from productflow_backend.infrastructure.text.openai_provider import OpenAITextProvider
+
+    provider = object.__new__(OpenAITextProvider)
+    response = "\n".join(
+        [
+            'event: response.output_text.delta',
+            'data: {"type":"response.output_text.delta","delta":"{\\"version\\":2,"}',
+            "",
+            'event: response.output_text.delta',
+            'data: {"type":"response.output_text.delta","delta":"\\"summary\\":\\"促销文案\\","}',
+            "",
+            'event: response.output_text.delta',
+            (
+                'data: {"type":"response.output_text.delta","delta":"\\"content\\":'
+                '{\\"kind\\":\\"freeform\\",\\"text\\":\\"五一促销\\"}}"}'
+            ),
+            "",
+            "event: response.completed",
+            'data: {"type":"response.completed","response":{"output":[]}}',
+        ]
+    )
+
+    assert provider._read_output_json(response) == {
+        "version": 2,
+        "summary": "促销文案",
+        "content": {"kind": "freeform", "text": "五一促销"},
+    }
+
+
 def test_ai_payload_normalizes_scalar_text_lists_without_swallowing_malformed_values() -> None:
     brief = CreativeBriefPayload.model_validate(
         {

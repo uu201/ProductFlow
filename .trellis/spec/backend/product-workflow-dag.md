@@ -821,6 +821,71 @@ CreativeBriefPayload.model_validate(response_json)
 Keep normalization and malformed-shape rejection inside the application contract validators so all provider entrypoints
 and workflow runs share the same behavior.
 
+## Scenario: OpenAI-compatible text response extraction
+
+### 1. Scope / Trigger
+
+- Trigger: any change to `OpenAITextProvider` response parsing for `generate_brief` or `generate_copy`.
+- Some OpenAI-compatible `/v1/responses` endpoints return a server-sent-event text body even for non-streaming SDK calls.
+  In that case the SDK result may be a plain `str`, not a `Response` object.
+
+### 2. Signatures
+
+- `OpenAITextProvider._read_output_json(response: object) -> dict`.
+- Supported response text sources:
+  - `response.output_text` for normal OpenAI SDK `Response` objects.
+  - Plain string JSON returned by compatible clients.
+  - SSE `data:` records whose event/type is `response.output_text.delta`.
+  - `response.model_dump(...).output[].content[].text` as a defensive SDK-object fallback.
+
+### 3. Contracts
+
+- The extraction step returns text only; JSON parsing and `CreativeBriefPayload` / `CopyPayloadV2` validation remain the
+  next contract boundary.
+- SSE extraction must concatenate only `response.output_text.delta` string chunks in order.
+- Empty extracted text must continue to fail as `ValueError("文案 provider 未返回 JSON 对象：<empty>")`.
+- Do not log full prompts, raw SSE payloads, provider responses, or API keys while diagnosing this path.
+
+### 4. Validation & Error Matrix
+
+- SDK `Response.output_text` contains JSON -> parse that JSON.
+- Compatible endpoint returns plain JSON string -> parse that JSON string.
+- Compatible endpoint returns SSE text with output deltas -> concatenate deltas, then parse JSON.
+- SSE text has no output-text deltas and is not JSON -> raise `ValueError` with a short snippet.
+- Extracted text is non-empty but malformed JSON -> try the existing embedded-object extraction before raising.
+
+### 5. Good/Base/Bad Cases
+
+- Good: `event: response.output_text.delta` chunks combine into `{"version":2,...}` and copy generation succeeds.
+- Base: official SDK object exposes `output_text`; no SSE parsing is needed.
+- Bad: reading only `getattr(response, "output_text", "")`, because a plain `str` response becomes `<empty>`.
+- Bad: parsing every SSE `data:` payload as content; lifecycle events such as `response.completed` are not text deltas.
+
+### 6. Tests Required
+
+- Provider regression with an SSE string containing multiple `response.output_text.delta` chunks, asserting
+  `_read_output_json(...)` returns the combined JSON object.
+- Keep provider payload tests covering prompt settings, scalar normalization, and workflow copy output shape green.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+text = getattr(response, "output_text", "").strip()
+```
+
+This treats compatible SSE string responses as empty output.
+
+#### Correct
+
+```python
+text = _response_output_text(response)
+payload = json.loads(text)
+```
+
+Centralize text extraction before JSON parsing so every text provider method supports the same response shapes.
+
 ## Scenario: Async workflow runs and deletion safety
 
 ### 1. Scope / Trigger

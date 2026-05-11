@@ -25,8 +25,8 @@ from productflow_backend.application.contracts import (
     PosterGenerationInput,
     ProductInput,
 )
-from productflow_backend.application.product_workflow_dependencies import WorkflowExecutionDependencies
 from productflow_backend.application.product_workflow.templates import TEMPLATE_METADATA_CONFIG_KEY
+from productflow_backend.application.product_workflow_dependencies import WorkflowExecutionDependencies
 from productflow_backend.domain.enums import (
     CopyStatus,
     PosterKind,
