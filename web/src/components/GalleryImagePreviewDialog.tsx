@@ -41,20 +41,20 @@ export function GalleryImagePreviewDialog({
 }: GalleryImagePreviewDialogProps) {
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/86 p-3 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 z-[80] flex items-center justify-center overflow-hidden bg-slate-950/86 p-2 backdrop-blur-sm sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}
       onClick={onClose}
     >
       <div
-        className="grid max-h-[96svh] w-full max-w-[92rem] overflow-y-auto rounded-lg bg-white shadow-2xl lg:grid-cols-[minmax(0,1fr)_380px] lg:overflow-hidden"
+        className="grid h-[calc(100svh-1rem)] max-h-[calc(100svh-1rem)] w-full max-w-[calc(100vw-1rem)] min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,42svh)] overflow-hidden rounded-lg bg-white shadow-2xl sm:h-[calc(100svh-2rem)] sm:max-h-[calc(100svh-2rem)] sm:max-w-[calc(100vw-2rem)] lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)] lg:grid-rows-1 xl:max-w-[92rem]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex min-h-[320px] max-h-[55svh] items-center justify-center bg-slate-950 lg:min-h-[520px] lg:max-h-none">
-          <img src={imageUrl} alt={imageAlt} decoding="async" className="max-h-[96svh] w-full object-contain" />
+        <div className="flex min-h-0 items-center justify-center bg-slate-950">
+          <img src={imageUrl} alt={imageAlt} decoding="async" className="h-full max-h-full w-full object-contain" />
         </div>
-        <aside className="flex min-h-0 flex-col border-l border-slate-200">
+        <aside className="flex min-h-0 flex-col border-t border-slate-200 lg:border-l lg:border-t-0">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
             <div className="min-w-0">
               <div className="text-sm font-bold text-slate-950">{title}</div>
