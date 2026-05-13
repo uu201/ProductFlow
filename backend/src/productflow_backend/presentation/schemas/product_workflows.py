@@ -81,6 +81,7 @@ class WorkflowRunResponse(BaseModel):
     started_at: datetime
     finished_at: datetime | None = None
     failure_reason: str | None = None
+    progress_metadata: dict[str, Any] | None = None
     is_retryable: bool
     is_cancelable: bool
     queue_active_count: int
@@ -99,6 +100,7 @@ class WorkflowRunStatusResponse(BaseModel):
     started_at: datetime
     finished_at: datetime | None = None
     failure_reason: str | None = None
+    progress_metadata: dict[str, Any] | None = None
     is_retryable: bool
     is_cancelable: bool
     queue_active_count: int
@@ -352,6 +354,7 @@ def serialize_workflow_run(run: WorkflowRun) -> WorkflowRunResponse:
         started_at=run.started_at,
         finished_at=run.finished_at,
         failure_reason=run.failure_reason,
+        progress_metadata=run.progress_metadata,
         is_retryable=workflow_run_is_retryable(run),
         is_cancelable=workflow_run_is_cancelable(run),
         **workflow_run_queue_fields(run),
@@ -368,6 +371,7 @@ def serialize_workflow_run_status(run: WorkflowRun) -> WorkflowRunStatusResponse
         started_at=run.started_at,
         finished_at=run.finished_at,
         failure_reason=run.failure_reason,
+        progress_metadata=run.progress_metadata,
         is_retryable=workflow_run_is_retryable(run),
         is_cancelable=workflow_run_is_cancelable(run),
         **workflow_run_queue_fields(run),

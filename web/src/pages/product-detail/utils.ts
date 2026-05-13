@@ -32,6 +32,15 @@ export interface WorkflowNodeActiveRunContext {
   nodeRun: WorkflowNodeRun;
 }
 
+export interface WorkflowRunRetryMetadata {
+  last_failure_reason?: string;
+  last_failure_category?: string;
+  last_failure_retryable?: boolean;
+  retry_hint?: "retry_later" | "revise_input" | "check_settings";
+  source_run_id?: string;
+  manual_retry?: boolean;
+}
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -207,18 +216,57 @@ export function getWorkflowNodeActiveRunContext(
 }
 
 export function workflowRunQueueText(run: WorkflowRun, t: TranslateFunction = defaultT): string {
+  const retryMetadata = workflowRunRetryMetadata(run);
+  const retryText =
+    run.status === "running" && retryMetadata?.last_failure_reason
+      ? t("detail.runRetryingAfterFailure", { reason: retryMetadata.last_failure_reason })
+      : "";
+  const parts = retryText ? [retryText] : [];
   if (typeof run.queue_position === "number") {
-    return t("detail.runQueuedText", {
+    parts.push(t("detail.runQueuedText", {
       position: run.queue_position,
       ahead: run.queued_ahead_count ?? 0,
       active: run.queue_active_count,
       max: run.queue_max_concurrent_tasks,
-    });
+    }));
+    return parts.join(" ");
   }
   if (run.status === "running") {
-    return t("detail.runRunningText", { running: run.queue_running_count, queued: run.queue_queued_count });
+    parts.push(t("detail.runRunningText", { running: run.queue_running_count, queued: run.queue_queued_count }));
+    return parts.join(" ");
   }
-  return "";
+  return retryText;
+}
+
+export function workflowRunRetryMetadata(run: Pick<WorkflowRun, "progress_metadata">): WorkflowRunRetryMetadata | null {
+  const metadata = run.progress_metadata;
+  if (!metadata || typeof metadata !== "object") {
+    return null;
+  }
+  const output: WorkflowRunRetryMetadata = {};
+  if (typeof metadata.last_failure_reason === "string" && metadata.last_failure_reason.trim()) {
+    output.last_failure_reason = metadata.last_failure_reason;
+  }
+  if (typeof metadata.last_failure_category === "string" && metadata.last_failure_category.trim()) {
+    output.last_failure_category = metadata.last_failure_category;
+  }
+  if (typeof metadata.last_failure_retryable === "boolean") {
+    output.last_failure_retryable = metadata.last_failure_retryable;
+  }
+  if (
+    metadata.retry_hint === "retry_later" ||
+    metadata.retry_hint === "revise_input" ||
+    metadata.retry_hint === "check_settings"
+  ) {
+    output.retry_hint = metadata.retry_hint;
+  }
+  if (typeof metadata.source_run_id === "string" && metadata.source_run_id.trim()) {
+    output.source_run_id = metadata.source_run_id;
+  }
+  if (typeof metadata.manual_retry === "boolean") {
+    output.manual_retry = metadata.manual_retry;
+  }
+  return Object.keys(output).length ? output : null;
 }
 
 export function workflowNodeRunDurationText(
@@ -312,6 +360,7 @@ export function mergeProductWorkflowStatusIntoDetail(
       started_at: run.started_at,
       finished_at: run.finished_at,
       failure_reason: run.failure_reason,
+      progress_metadata: run.progress_metadata,
       is_retryable: run.is_retryable,
       is_cancelable: run.is_cancelable,
       queue_active_count: run.queue_active_count,

@@ -141,6 +141,8 @@ def get_active_workflow_status(session: Session, product_id: str) -> ProductWork
                     WorkflowRun.started_at,
                     WorkflowRun.finished_at,
                     WorkflowRun.failure_reason,
+                    WorkflowRun.is_retryable,
+                    WorkflowRun.progress_metadata,
                 ),
                 selectinload(WorkflowRun.node_runs).load_only(
                     WorkflowNodeRun.id,

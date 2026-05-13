@@ -229,6 +229,7 @@ class WorkflowRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_retryable: Mapped[bool] = mapped_column(Boolean, default=True)
+    progress_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     workflow: Mapped[ProductWorkflow] = relationship(back_populates="runs")
     node_runs: Mapped[list[WorkflowNodeRun]] = relationship(

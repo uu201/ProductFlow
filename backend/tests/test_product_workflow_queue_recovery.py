@@ -393,6 +393,7 @@ def test_workflow_run_retry_creates_new_run_from_failed_run_without_duplicate_ac
         assert run is not None
         run.status = WorkflowRunStatus.FAILED
         run.failure_reason = "图片生成失败，请稍后重试"
+        run.is_retryable = True
         run.finished_at = datetime.now(UTC)
         for node_run in run.node_runs:
             node_run.status = WorkflowNodeStatus.FAILED
@@ -409,6 +410,13 @@ def test_workflow_run_retry_creates_new_run_from_failed_run_without_duplicate_ac
     assert runs[0]["id"] != failed_run_id
     assert runs[0]["status"] == "running"
     assert runs[0]["is_cancelable"] is True
+    assert runs[0]["progress_metadata"] == {
+        "last_failure_reason": "图片生成失败，请稍后重试",
+        "last_failure_retryable": True,
+        "retry_hint": "retry_later",
+        "source_run_id": failed_run_id,
+        "manual_retry": True,
+    }
     assert runs[1]["id"] == failed_run_id
     assert runs[1]["is_retryable"] is True
     assert sent_run_ids == [runs[0]["id"]]
@@ -416,6 +424,57 @@ def test_workflow_run_retry_creates_new_run_from_failed_run_without_duplicate_ac
     duplicate_retry = client.post(f"/api/products/{product_id}/workflow/runs/{failed_run_id}/retry")
     assert duplicate_retry.status_code == 400
     assert duplicate_retry.json()["detail"] == "相关节点运行中，不能重试"
+
+
+def test_workflow_run_retry_rejects_non_retryable_failed_run(
+    configured_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from productflow_backend.presentation.api import create_app
+
+    sent_run_ids: list[str] = []
+    monkeypatch.setattr(
+        "productflow_backend.application.product_workflow.execution.enqueue_workflow_run",
+        lambda run_id: sent_run_ids.append(run_id),
+    )
+    app = create_app()
+    client = TestClient(app)
+    _login(client)
+
+    created = client.post(
+        "/api/products",
+        data={"name": "不可重试工作流商品"},
+        files={"image": ("workflow.png", _make_demo_image_bytes(), "image/png")},
+    )
+    assert created.status_code == 201
+    product_id = created.json()["id"]
+    submitted = client.post(f"/api/products/{product_id}/workflow/run", json={})
+    assert submitted.status_code == 200
+    failed_run_id = submitted.json()["runs"][0]["id"]
+    assert sent_run_ids == [failed_run_id]
+
+    session = get_session_factory()()
+    try:
+        run = session.get(WorkflowRun, failed_run_id)
+        assert run is not None
+        run.status = WorkflowRunStatus.FAILED
+        run.failure_reason = "图片供应商拒绝了本次内容或安全策略，请调整提示词或参考图后重试"
+        run.is_retryable = False
+        run.finished_at = datetime.now(UTC)
+        for node_run in run.node_runs:
+            node_run.status = WorkflowNodeStatus.FAILED
+            node_run.failure_reason = run.failure_reason
+            node_run.finished_at = datetime.now(UTC)
+        session.commit()
+    finally:
+        session.close()
+
+    sent_run_ids.clear()
+    retried = client.post(f"/api/products/{product_id}/workflow/runs/{failed_run_id}/retry")
+
+    assert retried.status_code == 400
+    assert retried.json()["detail"] == "该工作流运行不可重试"
+    assert sent_run_ids == []
 
 
 def test_recover_unfinished_workflow_runs_requeues_queued_runs(
@@ -884,6 +943,11 @@ def test_workflow_image_generation_policy_reject_is_not_retryable(
     assert run.status == WorkflowRunStatus.FAILED
     assert run.failure_reason == "图片供应商拒绝了本次内容或安全策略，请调整提示词或参考图后重试"
     assert run.is_retryable is False
+    assert run.progress_metadata == {
+        "last_failure_reason": "图片供应商拒绝了本次内容或安全策略，请调整提示词或参考图后重试",
+        "last_failure_retryable": False,
+        "retry_hint": "revise_input",
+    }
 
 
 def test_workflow_time_limit_exception_marks_running_node_failed(

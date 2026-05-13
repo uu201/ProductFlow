@@ -244,6 +244,7 @@ export interface WorkflowRun {
   started_at: string;
   finished_at: string | null;
   failure_reason: string | null;
+  progress_metadata: Record<string, unknown> | null;
   is_retryable: boolean;
   is_cancelable: boolean;
   queue_active_count: number;
@@ -262,6 +263,7 @@ export interface WorkflowRunStatusSummary {
   started_at: string;
   finished_at: string | null;
   failure_reason: string | null;
+  progress_metadata: Record<string, unknown> | null;
   is_retryable: boolean;
   is_cancelable: boolean;
   queue_active_count: number;

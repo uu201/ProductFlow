@@ -42,6 +42,7 @@ from productflow_backend.application.product_workflow.run_state import (
     mark_workflow_run_failed,
     requeue_workflow_run_after_capacity_wait,
     safe_workflow_failure_reason,
+    workflow_run_failure_progress_metadata,
 )
 from productflow_backend.application.product_workflow_dependencies import (
     WorkflowExecutionDependencies,
@@ -161,6 +162,7 @@ def start_product_workflow_run(
     *,
     product_id: str,
     start_node_id: str | None = None,
+    progress_metadata: dict[str, Any] | None = None,
 ) -> WorkflowRunKickoff:
     workflow = get_or_create_product_workflow(session, product_id)
     ordered_nodes = product_workflow_graph.topological_nodes(workflow)
@@ -177,7 +179,11 @@ def start_product_workflow_run(
         )
 
     ensure_generation_capacity(session)
-    run = WorkflowRun(workflow_id=workflow.id, status=WorkflowRunStatus.RUNNING)
+    run = WorkflowRun(
+        workflow_id=workflow.id,
+        status=WorkflowRunStatus.RUNNING,
+        progress_metadata=progress_metadata,
+    )
     logger.info(
         "创建商品工作流运行: product_id=%s workflow_id=%s start_node_id=%s",
         product_id,
@@ -236,6 +242,8 @@ def retry_product_workflow_run(
         raise NotFoundError("工作流运行不存在")
     if run.status != WorkflowRunStatus.FAILED:
         raise BusinessValidationError("只有失败的工作流运行可以重试")
+    if not run.is_retryable:
+        raise BusinessValidationError("该工作流运行不可重试")
     start_node_id = _workflow_run_retry_start_node_id(run)
     node_ids_to_run = _node_ids_to_run(session, workflow, start_node_id)
     if _active_workflow_run_for_nodes(workflow, node_ids_to_run) is not None:
@@ -245,6 +253,7 @@ def retry_product_workflow_run(
         product_id=product_id,
         start_node_id=start_node_id,
         enqueue=enqueue,
+        progress_metadata=_workflow_run_retry_progress_metadata(run),
     )
 
 
@@ -288,8 +297,14 @@ def submit_product_workflow_run(
     product_id: str,
     start_node_id: str | None = None,
     enqueue: Callable[[str], None] | None = None,
+    progress_metadata: dict[str, Any] | None = None,
 ) -> ProductWorkflow:
-    kickoff = start_product_workflow_run(session, product_id=product_id, start_node_id=start_node_id)
+    kickoff = start_product_workflow_run(
+        session,
+        product_id=product_id,
+        start_node_id=start_node_id,
+        progress_metadata=progress_metadata,
+    )
     if kickoff.should_enqueue:
         enqueue_or_mark_failed(
             kickoff.run_id,
@@ -297,6 +312,20 @@ def submit_product_workflow_run(
             mark_failed=lambda run_id, reason: mark_workflow_run_enqueue_failed(session, run_id=run_id, reason=reason),
         )
     return kickoff.workflow
+
+
+def _workflow_run_retry_progress_metadata(run: WorkflowRun) -> dict[str, Any] | None:
+    if not run.failure_reason:
+        return None
+    previous = run.progress_metadata if isinstance(run.progress_metadata, dict) else {}
+    metadata = workflow_run_failure_progress_metadata(reason=run.failure_reason, retryable=run.is_retryable)
+    if isinstance(previous.get("last_failure_category"), str):
+        metadata["last_failure_category"] = previous["last_failure_category"]
+    if isinstance(previous.get("retry_hint"), str):
+        metadata["retry_hint"] = previous["retry_hint"]
+    metadata["source_run_id"] = run.id
+    metadata["manual_retry"] = True
+    return metadata
 
 
 def execute_product_workflow_run(

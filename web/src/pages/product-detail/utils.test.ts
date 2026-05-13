@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { TranslationKey } from "../../lib/i18n";
+import type { TranslationKey, TranslationParams } from "../../lib/i18n";
 import type { ProductWorkflow, WorkflowNode, WorkflowRun, WorkflowRunStatusSummary } from "../../lib/types";
 import {
   getWorkflowNodeCancelableRun,
@@ -18,6 +18,7 @@ import {
   workflowNodeRunStatusLabel,
   workflowNodeStatusLabel,
   workflowRunQueueText,
+  workflowRunRetryMetadata,
 } from "./utils";
 
 const baseNode: WorkflowNode = {
@@ -37,7 +38,15 @@ const baseNode: WorkflowNode = {
 };
 
 function stubT(values: Partial<Record<TranslationKey, string>>) {
-  return (key: TranslationKey): string => values[key] ?? key;
+  return (key: TranslationKey, params?: TranslationParams): string => {
+    let text = values[key] ?? key;
+    if (params) {
+      for (const [name, value] of Object.entries(params)) {
+        text = text.replaceAll(`{${name}}`, String(value));
+      }
+    }
+    return text;
+  };
 }
 
 function workflowWith(overrides: Partial<ProductWorkflow>): ProductWorkflow {
@@ -63,6 +72,7 @@ function workflowRun(overrides: Partial<WorkflowRun>): WorkflowRun {
     started_at: "2026-04-26T00:00:00Z",
     finished_at: null,
     failure_reason: null,
+    progress_metadata: null,
     is_retryable: false,
     is_cancelable: true,
     queue_active_count: 1,
@@ -84,6 +94,7 @@ function workflowRunStatus(overrides: Partial<WorkflowRunStatusSummary>): Workfl
     started_at: "2026-04-26T00:00:00Z",
     finished_at: null,
     failure_reason: null,
+    progress_metadata: null,
     is_retryable: false,
     is_cancelable: true,
     queue_active_count: 1,
@@ -128,6 +139,35 @@ describe("product-detail utils", () => {
     ).toBe(true);
 
     expect(hasActiveWorkflow(workflowWith({}))).toBe(false);
+  });
+
+  it("reads workflow run retry metadata and includes the previous failure in active retry text", () => {
+    const run = workflowRun({
+      progress_metadata: {
+        last_failure_reason: "图片供应商拒绝了本次内容",
+        last_failure_retryable: true,
+        retry_hint: "retry_later",
+        source_run_id: "failed-run-1",
+        manual_retry: true,
+      },
+    });
+
+    expect(workflowRunRetryMetadata(run)).toEqual({
+      last_failure_reason: "图片供应商拒绝了本次内容",
+      last_failure_retryable: true,
+      retry_hint: "retry_later",
+      source_run_id: "failed-run-1",
+      manual_retry: true,
+    });
+    expect(
+      workflowRunQueueText(
+        run,
+        stubT({
+          "detail.runRetryingAfterFailure": "上次失败：{reason}。正在重试。",
+          "detail.runQueuedText": "排队第 {position} 位，前方 {ahead} 个；全局活跃 {active}/{max}。",
+        }),
+      ),
+    ).toBe("上次失败：图片供应商拒绝了本次内容。正在重试。 排队第 1 位，前方 0 个；全局活跃 1/3。");
   });
 
   it("scopes visible image waiting state to image-generation and reference nodes", () => {

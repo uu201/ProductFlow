@@ -53,11 +53,13 @@ def test_sqlalchemy_enum_columns_use_database_values() -> None:
     assert WorkflowRun.__table__.c.status.type.enums == [member.value for member in WorkflowRunStatus]
 
 
-def test_workflow_run_model_has_retryability_default() -> None:
+def test_workflow_run_model_has_retryability_and_progress_metadata() -> None:
     table = WorkflowRun.__table__
     assert "is_retryable" in table.c
     assert not table.c.is_retryable.nullable
     assert table.c.is_retryable.default is not None
+    assert "progress_metadata" in table.c
+    assert table.c.progress_metadata.nullable
 
 
 def test_gallery_entry_model_matches_migration_contract() -> None:
@@ -321,6 +323,74 @@ def test_workflow_run_retryability_migration_supports_sqlite(tmp_path: Path, mon
     inspector = sa.inspect(engine)
     columns = {column["name"] for column in inspector.get_columns("workflow_runs")}
     assert "is_retryable" not in columns
+
+    engine.dispose()
+    get_settings.cache_clear()
+
+
+def test_workflow_run_progress_metadata_migration_supports_sqlite(tmp_path: Path, monkeypatch) -> None:
+    database_path = tmp_path / "workflow-run-progress-metadata.db"
+    storage_root = tmp_path / "storage"
+    monkeypatch.setenv("ADMIN_ACCESS_KEY", "super-secret-admin-key")
+    monkeypatch.setenv("SESSION_SECRET", "super-secret-session-key-123")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{database_path}")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/9")
+    monkeypatch.setenv("STORAGE_ROOT", str(storage_root))
+    get_settings.cache_clear()
+
+    backend_dir = Path(__file__).resolve().parents[1]
+    config = Config(str(backend_dir / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_dir / "alembic"))
+    command.upgrade(config, "20260512_0025")
+
+    engine = sa.create_engine(f"sqlite:///{database_path}")
+    now = "2026-05-13 00:00:00"
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text(
+                "INSERT INTO products (id, name, created_at, updated_at) "
+                "VALUES ('product-1', '进度迁移商品', :now, :now)"
+            ),
+            {"now": now},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO product_workflows (id, product_id, title, active, created_at, updated_at) "
+                "VALUES ('workflow-1', 'product-1', '迁移工作流', 1, :now, :now)"
+            ),
+            {"now": now},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO workflow_runs (id, workflow_id, status, started_at, is_retryable) "
+                "VALUES ('run-1', 'workflow-1', 'running', :now, 1)"
+            ),
+            {"now": now},
+        )
+
+    engine.dispose()
+    command.upgrade(config, "head")
+
+    engine = sa.create_engine(f"sqlite:///{database_path}")
+    inspector = sa.inspect(engine)
+    columns = {column["name"]: column for column in inspector.get_columns("workflow_runs")}
+    assert columns["progress_metadata"]["nullable"] is True
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text("UPDATE workflow_runs SET progress_metadata = :metadata WHERE id = 'run-1'"),
+            {"metadata": json.dumps({"last_failure_reason": "上次失败"})},
+        )
+        metadata = connection.execute(
+            sa.text("SELECT progress_metadata FROM workflow_runs WHERE id = 'run-1'")
+        ).scalar_one()
+    assert json.loads(metadata)["last_failure_reason"] == "上次失败"
+
+    engine.dispose()
+    command.downgrade(config, "20260512_0025")
+    engine = sa.create_engine(f"sqlite:///{database_path}")
+    inspector = sa.inspect(engine)
+    columns = {column["name"] for column in inspector.get_columns("workflow_runs")}
+    assert "progress_metadata" not in columns
 
     engine.dispose()
     get_settings.cache_clear()

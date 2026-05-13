@@ -24,6 +24,14 @@ WORKFLOW_CANCELLED_REASON = "已取消"
 PRODUCT_WORKFLOW_CAPACITY_RETRY_DELAY_MS = 2000
 
 
+def workflow_run_failure_progress_metadata(*, reason: str, retryable: bool) -> dict[str, Any]:
+    return {
+        "last_failure_reason": reason,
+        "last_failure_retryable": retryable,
+        "retry_hint": "retry_later" if retryable else "revise_input",
+    }
+
+
 class WorkflowSafeExecutionError(RuntimeError):
     """Execution failure whose string is safe to persist and show to users."""
 
@@ -129,6 +137,7 @@ def mark_workflow_run_failed(
     persisted_run.status = WorkflowRunStatus.FAILED
     persisted_run.failure_reason = reason
     persisted_run.is_retryable = is_retryable
+    persisted_run.progress_metadata = workflow_run_failure_progress_metadata(reason=reason, retryable=is_retryable)
     persisted_run.finished_at = now
     persisted_run.workflow.updated_at = now
     session.commit()
