@@ -17,16 +17,17 @@ Completed baseline capabilities:
 - Generated image gallery: iterative image results can be collected at `/gallery`, keeping source session, product, prompt, size, model, and download entrypoint.
 - Product DAG workflow editing, execution, persistent state, and recovery.
 - Shared top navigation.
-- ProductFlow workbench canvas interactions: mouse-wheel zoom, left-drag pan, node drag positioning, box selection / multi-select, and edge drag creation/deletion.
+- ProductFlow workbench canvas interactions: desktop mouse-wheel zoom, left-drag pan, node drag positioning, box selection / multi-select, and edge drag creation/deletion; mobile Browse, Edit, and Select modes, touch drag/edge creation, and two-finger pinch zoom.
 - Full scenario templates for product creation: blank canvas, marketplace hero images, detail persuasion, scene galleries, content covers, and campaign assets.
 - Workbench templates: the same built-in scenario templates can be inserted into existing canvases and automatically reuse the product node; users can save selected nodes as their own node-group templates with rename and archive-delete support.
-- Single-slot semantics for reference images, image drag-and-drop upload, compact right sidebar for Details / Runs / Images / Templates, and asset fill.
+- Single-slot semantics for reference images, image drag-and-drop upload, compact right sidebar for Details / Runs / Library / Templates, and asset fill.
 - In-product help page: `/help` covers quick start, canvas operations, templates, run failure handling, supported operations, and common questions.
 - Prompt configuration: product understanding, copy, workbench image generation, and iterative image-generation templates can be overridden in the settings page.
 - Initial product brand assets, README preview images, and Web favicon/metadata.
 - Settings page management for providers, models, upload limits, job retry, and other business configuration.
 - Lightweight status polling while running: iterative image generation and product workflows poll status responses only, then refresh full details after completion.
-- Mobile iterative image page adaptation: top actions, status, preview, settings, reference images, and parameters are organized as a single-column mobile flow.
+- Mobile product list and product workbench adaptation: product list cards with floating pagination, plus workbench bottom toolbar, bottom sheet, and canvas touch modes.
+- Mobile iterative image page adaptation: main view, session drawer, narrow history drawer, generation-settings bottom sheet, and bottom quick actions are organized for small screens.
 - One-command Docker Compose self-hosting path: `docker compose up -d --build` starts PostgreSQL, Redis, backend API, Dramatiq worker, and the Web static site; `just release` now uses the Compose production update and health-check flow.
 - Basic open-source files, MIT License, contribution/security guides, and issue/PR templates.
 

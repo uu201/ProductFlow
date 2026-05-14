@@ -9,7 +9,7 @@ This document has two parts:
 
 The product now provides a **Help** page in the top navigation for quick access to workflows, templates, supported operations, and common troubleshooting. This Markdown document remains as repository text reference and should stay aligned with the in-product help page.
 
-The current workbench is the **ProductFlow workbench**: the middle area is a zoomable and draggable node canvas; the right side is a compact sidebar that switches between **Details / Runs / Images / Templates** with a small rail. Normal use does not require understanding the internal DAG. Just remember: product, reference image, copy, and image generation are cards; edges mean "downstream generation refers to upstream data".
+The current workbench is the **ProductFlow workbench**: the middle area is a zoomable and draggable node canvas. On desktop, the right side is a compact sidebar that switches between **Details / Runs / Library / Templates** with a small rail. On mobile, the canvas remains the main surface and the bottom toolbar opens workflow run, Single node, Templates, Details, Runs, and Library controls. Normal use does not require understanding the internal DAG. Just remember: product, reference image, copy, and image generation are cards; edges mean "downstream generation refers to upstream data".
 
 ---
 
@@ -78,7 +78,7 @@ Expected result: an edge appears on the canvas. When the connected card runs lat
 
 4. Click **Run current node** or **Run workflow**.
 
-Expected result: the downstream reference image card is filled with the new image and provides preview/download on the card. The right-side **Images** panel also aggregates the image. Click the thumbnail to preview it in the app; click **Download** to download the original image.
+Expected result: the downstream reference image card is filled with the new image and provides preview/download on the card. The right-side **Library** panel also aggregates the image. Click the thumbnail to preview it in the app; click **Download** to download the original image.
 
 If there is no downstream reference image card connected, the system tells you to connect at least one image/reference image node first. It will not silently place the image on the image-generation card.
 
@@ -103,12 +103,16 @@ Download the image when you are satisfied. If you want to continue fine-tuning i
 
 ### Canvas Basics
 
-- **Zoom**: move the mouse into the workbench canvas and scroll the wheel; the canvas zooms around the mouse position. Zoom buttons and percentage are also available in the lower-right corner.
-- **Pan**: hold the left mouse button on blank canvas and drag to move the view. Dragging cards, clicking buttons, uploading, or dragging edges does not trigger canvas panning.
-- **Move cards**: hold the card body or title area and drag; the position is saved after release. It stays where you placed it after refresh.
-- **Connect cards**: drag from a card connection point to a target card. An edge is created after release. Edges are part of the workflow, not temporary visuals.
-- **Multi-select cards**: drag a selection box from blank canvas, or use multi-select operations to select several nodes. A selected group can be moved, deleted, or saved as a node-group template.
-- **Adjust sidebar**: the right sidebar handles Details, Runs, Images, and Templates. It stays compact and no longer uses a large bottom panel that occupies canvas space.
+- **Desktop zoom**: move the mouse into the workbench canvas and scroll the wheel; the canvas zooms around the mouse position. Zoom buttons and percentage are also available in the lower-right corner.
+- **Desktop pan**: hold the left mouse button on blank canvas and drag to move the view. Dragging cards, clicking buttons, uploading, or dragging edges does not trigger canvas panning.
+- **Desktop move cards**: hold the card body or title area and drag; the position is saved after release. It stays where you placed it after refresh.
+- **Desktop connect cards**: drag from a card connection point to a target card. An edge is created after release. Edges are part of the workflow, not temporary visuals.
+- **Desktop multi-select cards**: hold Shift and drag a selection box from blank canvas, or Ctrl / Cmd / Shift-click several nodes. A selected group can be moved, deleted, or saved as a node-group template.
+- **Mobile browse mode**: the product workbench opens in browse mode on mobile. One-finger dragging on blank canvas pans the view, tapping a node selects it, and two-finger pinch zooms the canvas.
+- **Mobile edit mode**: after switching the bottom mode control to **Edit**, touch and pen input can drag nodes and create edges from output handles to target nodes.
+- **Mobile select mode**: after switching the bottom mode control to **Select**, tapping nodes adds or removes them from multi-select. Tapping blank canvas exits the temporary selection mode.
+- **Mobile toolbar and panels**: the bottom toolbar provides workflow run, Single node, Templates, Details, Runs, and Library entrypoints. Those sidebar contents open as a bottom sheet on mobile.
+- **Adjust sidebar**: on desktop, the right sidebar handles Details, Runs, Library, and Templates. It stays compact and no longer uses a large bottom panel that occupies canvas space.
 
 ### Node Group Templates
 
@@ -133,7 +137,14 @@ Saving a user template stores only reusable node configuration and internal edge
 
 5. When satisfied, write the image back to the product so the workbench can reference it later.
 
-On small screens, Image chat switches to a single-column layout: top actions, generation status, result preview, history, and generation settings appear in order. When generating multiple candidates, the history first shows matching in-progress placeholders.
+On small screens, Image chat uses a main-view, drawer, and bottom-sheet layout:
+
+- **Top bar**: the left button opens the session drawer, the center shows the current session title, the pencil renames it, and the right button opens the history drawer.
+- **Left session drawer**: create, select, and delete sessions. Session cards show the latest thumbnail, round count, and update time; selecting a session switches the main view to it.
+- **Right history drawer**: shows branch/candidate history and running placeholders. Tapping a completed image selects it as the current result and the next base image; tapping a placeholder shows that candidate's queued, generating, failed, or cancelled state.
+- **Main view**: generation status, current result, failure reason, and provider notes remain visible. When a multi-candidate task is submitted, history first shows the matching number of placeholders; while running, the page refreshes lightweight status and refreshes full session detail after the task ends.
+- **Bottom action bar**: the generation entry is always available. After a completed result is selected, the bar also shows Download and Send to gallery.
+- **Bottom generation sheet**: contains Generation and Advanced tabs. Generation manages product linking, product references, session references, image description, size, and candidate count; Advanced manages enabled image tool parameters. The submit button at the bottom starts generation using the current candidate count.
 
 ### 8. Save to Gallery
 
@@ -159,7 +170,7 @@ Stores product name, category, price, and description. Downstream generation pri
 
 A reference image card holds only the current image. You can upload manually, or let an image-generation card fill it with a new image. The new image replaces the current image in the card; old assets remain in product history.
 
-When a reference image card is selected, assets in the right-side **Images** panel show fill actions. When filling from an existing asset, the system reuses the existing asset record and does not create a duplicate upload for the same image.
+When a reference image card is selected, assets in the right-side **Library** panel show fill actions. When filling from an existing asset, the system reuses the existing asset record and does not create a duplicate upload for the same image.
 
 ### Copy
 
@@ -182,7 +193,7 @@ The image-generation card now distinguishes between "generate directly from prod
 - To generate from product details all the way to image: run the whole workflow.
 - Before running, confirm that the right-side form is saved. If the selected card has unsaved draft content, the current run button first attempts to save it, then starts running.
 - You can keep organizing canvas positions while the workflow is running, but do not repeatedly click run or change the structure.
-- Image-generation results are not downloaded from the image-generation card. Use the downstream reference image card or the right-side **Images** panel.
+- Image-generation results are not downloaded from the image-generation card. Use the downstream reference image card or the right-side **Library** panel.
 - Running workflows can be cancelled from the Details or Runs area for the node involved. Failed retryable runs expose a retry action.
 - Failure messages try to distinguish provider quota/rate limit, content policy, network interruption, request timeout, provider service error, and unsupported parameters.
 

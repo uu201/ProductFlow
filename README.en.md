@@ -18,18 +18,23 @@ The current form is a private single-admin instance. A self-hosted deployment re
 ### Products / Workbench
 
 - Single-admin access-key login with Cookie session access to backend APIs.
-- Product list, paginated browsing, product creation, product detail workbench, and product deletion protected by a global switch.
+- Product list, paginated browsing, product creation, product detail workbench, and product deletion protected by a global switch; the mobile product list uses cards and floating pagination.
 - Node canvas for product information, reference images, copy nodes, and image-generation nodes.
-- Canvas interactions: mouse-wheel zoom, drag panning on blank canvas, node dragging, node connections, edge deletion, Ctrl/Cmd/Shift multi-select, and Shift box selection.
+- Desktop canvas interactions: mouse-wheel zoom, drag panning on blank canvas, node dragging, node connections, edge deletion, Ctrl/Cmd/Shift multi-select, and Shift box selection.
+- The mobile product workbench keeps the canvas as the main surface and provides Browse, Edit, and Select modes; it supports one-finger pan, node tap selection, two-finger zoom, touch node dragging, touch edge creation, and tap-based multi-select.
+- The mobile bottom toolbar opens workflow run, Single node, Templates, Details, Runs, and Library entrypoints, with panel content shown from a bottom sheet.
 - Full-canvas templates for product creation; built-in node-group templates and user node-group templates for adding flows inside the workbench.
 - Product source images, reference images, and iterative image-session references support click-to-select and drag-and-drop upload, protected by MIME, size, pixel, and count limits.
 - Reference image nodes are single-image slots. Manual upload or upstream generation replaces the current image, while old assets stay in product history/assets.
 - Copy nodes support generation, editing, confirmation, and history; current outputs are editable structured copy used by later image generation.
-- Image-generation nodes only trigger and configure generation; results are written into connected downstream reference image nodes and previewed/downloaded from the reference image or Images sidebar.
+- Image-generation nodes only trigger and configure generation; results are written into connected downstream reference image nodes and previewed/downloaded from the reference image or Library sidebar.
 
 ### Text / Image Generation
 
-- Standalone image sessions support reference uploads, base image selection from history, iterative generation, multiple-candidate comparison, and a mobile single-column layout.
+- Standalone image sessions support reference uploads, base image selection from history, iterative generation, multiple-candidate comparison, and a mobile main-view/drawer/bottom-sheet layout.
+- Mobile image chat uses a top bar for the session drawer, current session title/rename, and history drawer; generation status, the current result, and provider notes remain in the main view.
+- Sessions open from the left drawer for create, select, and delete actions; branch/candidate history opens from the narrow right drawer, and tapping a completed image selects it as the current result and next base image.
+- The bottom action bar always exposes the generation entry. After a completed result is selected, it also exposes download and send-to-gallery. The bottom generation sheet contains Generation / Advanced tabs, product linking, product/session references, prompt, size, candidate count, and image tool parameters.
 - Running state includes queue position, lightweight status refresh, candidate progress, failure reasons, cancel, and retry.
 - Generated images can be downloaded, sent to the gallery, saved as product reference images, or saved as product main-image references.
 

@@ -54,7 +54,7 @@ The frontend uses TanStack Query for server state. The product detail page and i
 
 Do not reintroduce active polling for complete `ImageSessionDetailResponse` or complete `ProductWorkflowResponse`; those payloads include image history, node configuration, artifact references, and run records, and high-frequency refresh increases frontend render cost and backend serialization work.
 
-The product detail page is currently the ProductFlow workbench: the canvas handles nodes, edges, zoom, pan, node dragging, box selection, and multi-select; the right sidebar handles Details, Runs, Images, and Templates. Canvas zoom ratio and sidebar width are browser-local preferences, while workflow nodes, edges, run state, and artifacts remain database-backed.
+The product detail page is currently the ProductFlow workbench: the canvas handles nodes, edges, zoom, pan, node dragging, box selection, and multi-select. On desktop, the right sidebar handles Details, Runs, Library, and Templates. On mobile, a bottom toolbar carries the workflow run entrypoint plus Single node, Templates, Details, Runs, and Library entrypoints, and a bottom sheet renders those panel contents. The mobile canvas has local `browse` / `edit` / `select` interaction modes: `browse` handles one-finger pan, node tap selection, and two-finger pinch zoom; `edit` allows touch/pen node dragging and edge creation; `select` toggles multi-select by tapping nodes. Canvas zoom ratio and desktop sidebar width are browser-local preferences, while mobile mode and sheet openness are page-local UI state. Workflow nodes, edges, run state, and artifacts remain database-backed.
 
 ## 4. Main Data Model Lines
 

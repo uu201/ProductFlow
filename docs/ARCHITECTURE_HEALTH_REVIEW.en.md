@@ -19,7 +19,7 @@ Compared with the historical review, several key governance items have landed:
 - `ProductDetailPage.tsx` has moved Runs, Images, Inspector, NodeCard, canvas utilities, download helpers, and related pieces into `web/src/pages/product-detail/`.
 - Iterative image generation now uses durable `ImageSessionGenerationTask` records, with startup recovery, queue position, and failure state.
 - The generated image gallery has landed, and iterative image results can be saved to `/gallery`.
-- Iterative image generation has a mobile single-column layout, reducing panel crowding on phones.
+- Iterative image generation has a mobile main-view, side-drawer, bottom generation sheet, and bottom action bar layout, reducing panel crowding on phones.
 - Iterative image generation and product workflows both use lightweight status polling while running, then refresh full details after completion.
 
 The main risk has shifted from "oversized hot modules and missing frontend quality gates" to "state consistency as async chains grow, frontend interaction regression coverage, and clear productionization boundaries." No P0 architecture issue was found that should immediately block feature development.
@@ -171,7 +171,7 @@ The Docker Compose self-hosted path is available, but ProductFlow is still not a
 - There is no Helm chart or released container image; the current path builds from the repository through Compose.
 - There is no audit admin, object-level permission model, payment system, or hosted account system.
 
-These are not current implementation defects, but docs and the roadmap must keep marking them as unimplemented or future directions to avoid misleading deployment expectations.
+These items remain unimplemented boundaries. Docs and the roadmap must keep marking them as future directions to avoid misleading deployment expectations.
 
 ### R5. Provider Error Classification and Observability Can Improve Further
 

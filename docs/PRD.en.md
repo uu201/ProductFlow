@@ -27,7 +27,8 @@ Non-target users: teams that need multi-tenant isolation, complex RBAC, payment 
 3. Enter the product workbench and add category, price, product notes, and generation direction.
 4. Use copy nodes to generate and edit structured copy; later image generation reads the structured copy context directly.
 5. Use image-generation nodes to generate images and fill downstream reference-image slots.
-6. Download images/posters, or review product asset history in the right-side Images panel.
+6. Download images/posters, or review product asset history in the right-side Library panel.
+7. On mobile, the product list uses cards and floating pagination; product detail keeps the canvas as the main view and opens workflow run, Single node, Templates, Details, Runs, and Library from the bottom toolbar.
 
 ### 3.2 Iterative Image Sessions
 
@@ -37,7 +38,7 @@ Non-target users: teams that need multi-tenant isolation, complex RBAC, payment 
 4. Continue from any generated candidate, or explicitly select reference images for the next generation round.
 5. View queued/running/failed state; after task completion, the page refreshes new candidates automatically.
 6. Attach satisfactory generated images back to a product as reference assets, save them as product main-image references, or collect them in the gallery.
-7. On mobile, use the single-column layout: top actions, status, result preview, generation settings, reference images, and parameter selection.
+7. On mobile, use a main-view, drawer, and bottom-sheet layout: the top bar exposes the session drawer, current session title/rename, and history drawer; the main view keeps status, current result, and provider notes; the left drawer manages sessions; the narrow right drawer selects branch/candidate history; the bottom generation sheet carries product linking, references, prompt, size, candidate count, and advanced image tool parameters.
 
 ### 3.3 Product DAG Workflow
 
@@ -48,6 +49,7 @@ Non-target users: teams that need multi-tenant isolation, complex RBAC, payment 
 5. Start a background workflow run, then cancel running work or retry failed runs when needed.
 6. Persist run state, node state, and failure reasons in the database.
 7. While running, the frontend polls lightweight workflow status; after completion, it refreshes full workflow, product detail, and historical artifacts.
+8. On mobile, the canvas provides Browse, Edit, and Select modes: Browse supports one-finger pan, node tap selection, and two-finger zoom; Edit supports touch node dragging and edge creation; Select supports tap-based multi-select.
 
 ### 3.4 Gallery
 
@@ -104,6 +106,7 @@ For a single self-hosted deployment, the current version should be able to:
 10. Save business configuration overrides through `/settings` while avoiding secret values in API responses.
 11. Store uploaded/generated files in local storage and read them through controlled download APIs.
 12. Read in-product operation guidance and support boundaries at `/help`.
+13. Use responsive mobile entrypoints for the product list, product workbench canvas, and iterative image page.
 
 ## 7. Explicit Boundaries
 
