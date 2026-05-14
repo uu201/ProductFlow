@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { createPortal } from "react-dom";
 
 import type { DownloadableImage } from "../../lib/image-downloads";
 import { useI18n } from "../../lib/preferences";
@@ -13,9 +14,9 @@ interface ImagePreviewModalProps {
 export function ImagePreviewModal({ image, onClose }: ImagePreviewModalProps) {
   const { t } = useI18n();
 
-  return (
+  const modal = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/70 p-6"
+      className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/70 p-6"
       role="dialog"
       aria-modal="true"
       aria-label={image.alt}
@@ -51,4 +52,6 @@ export function ImagePreviewModal({ image, onClose }: ImagePreviewModalProps) {
       </div>
     </div>
   );
+
+  return typeof document === "undefined" ? modal : createPortal(modal, document.body);
 }

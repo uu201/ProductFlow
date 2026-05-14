@@ -1966,7 +1966,11 @@ export function ProductDetailPage() {
             </div>
             <div
               ref={canvasScrollRef}
-              className={`h-full touch-none overflow-auto overscroll-contain p-3 pb-[calc(13rem+env(safe-area-inset-bottom))] lg:p-6 ${panePan ? "cursor-grabbing" : pinchZooming ? "cursor-zoom-in" : "cursor-grab"}`}
+              className={`h-full touch-none overflow-auto overscroll-contain p-3 lg:p-6 ${
+                selectedGroupCount > 1
+                  ? "pb-[calc(22rem+env(safe-area-inset-bottom))] lg:pb-6"
+                  : "pb-[calc(13rem+env(safe-area-inset-bottom))] lg:pb-6"
+              } ${panePan ? "cursor-grabbing" : pinchZooming ? "cursor-zoom-in" : "cursor-grab"}`}
               onPointerDown={startPanePan}
               onPointerMove={movePanePan}
               onPointerUp={endPanePan}
@@ -2132,8 +2136,8 @@ export function ProductDetailPage() {
               </div>
             </div>
             {selectedGroupCount > 1 ? (
-              <div data-canvas-control className="pointer-events-none absolute left-3 right-3 top-[4.5rem] z-30 lg:left-1/2 lg:right-auto lg:top-4 lg:-translate-x-1/2">
-                <div className="pointer-events-auto rounded-xl border border-indigo-200 bg-white/95 p-2.5 text-sm font-semibold text-indigo-700 shadow-lg shadow-indigo-950/10 backdrop-blur dark:border-violet-400/50 dark:bg-[#151f33]/95 dark:text-violet-100 dark:shadow-black/30 lg:min-w-[22rem]">
+              <div data-canvas-control className="pointer-events-none absolute bottom-[calc(12.75rem+env(safe-area-inset-bottom))] left-3 right-3 z-30 lg:bottom-auto lg:left-1/2 lg:right-auto lg:top-4 lg:-translate-x-1/2">
+                <div className="pointer-events-auto max-h-[calc(100dvh-16rem)] overflow-y-auto rounded-xl border border-indigo-200 bg-white/95 p-2.5 text-sm font-semibold text-indigo-700 shadow-lg shadow-indigo-950/10 backdrop-blur dark:border-violet-400/50 dark:bg-[#151f33]/95 dark:text-violet-100 dark:shadow-black/30 lg:max-h-none lg:min-w-[22rem] lg:overflow-visible">
                   <div className="flex items-center gap-2">
                     <Check size={16} strokeWidth={2.5} />
                     <span className="mr-auto">{t("detail.selectedCount", { count: selectedGroupCount })}</span>

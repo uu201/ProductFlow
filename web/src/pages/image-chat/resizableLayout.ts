@@ -30,6 +30,26 @@ export function wheelDeltaToPixels(delta: number, deltaMode: number, pageSize: n
   return delta;
 }
 
+export function getVerticalWheelMappedScrollLeft(
+  container: { scrollLeft: number; scrollWidth: number; clientWidth: number },
+  wheel: { deltaX: number; deltaY: number; deltaMode: number },
+) {
+  const maxScrollLeft = container.scrollWidth - container.clientWidth;
+  if (maxScrollLeft <= 1) {
+    return null;
+  }
+
+  const absDeltaX = Math.abs(wheel.deltaX);
+  const absDeltaY = Math.abs(wheel.deltaY);
+  if (absDeltaY === 0 || absDeltaX >= absDeltaY) {
+    return null;
+  }
+
+  const delta = wheelDeltaToPixels(wheel.deltaY, wheel.deltaMode, container.clientWidth);
+  const nextScrollLeft = clampPanelSize(container.scrollLeft + delta, 0, maxScrollLeft);
+  return nextScrollLeft === container.scrollLeft ? null : nextScrollLeft;
+}
+
 export function getLeftPanelMaxWidth(viewportWidth: number, rightPanelWidth: number) {
   return Math.max(
     LEFT_PANEL_MIN_WIDTH,

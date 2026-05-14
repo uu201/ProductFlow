@@ -1,28 +1,17 @@
-import type { CSSProperties, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 
 import type { PromptPreview } from "../../components/PromptPreviewDialog";
-import { clampPanelSize, wheelDeltaToPixels } from "./resizableLayout";
+import { getVerticalWheelMappedScrollLeft } from "./resizableLayout";
 import type { ImageHistoryBranch } from "./branching";
 import type { ImageChatTranslate } from "./display";
 import { HistoryBranchStrip } from "./HistoryBranchStrip";
 
-function handleHistoryWheelScroll(event: ReactWheelEvent<HTMLDivElement>) {
+function handleHistoryWheelScroll(event: WheelEvent, container: HTMLDivElement) {
   if (event.ctrlKey) {
     return;
   }
-  const container = event.currentTarget;
-  const maxScrollLeft = container.scrollWidth - container.clientWidth;
-  if (maxScrollLeft <= 1) {
-    return;
-  }
-  const absDeltaX = Math.abs(event.deltaX);
-  const absDeltaY = Math.abs(event.deltaY);
-  if (absDeltaY === 0 || absDeltaX >= absDeltaY) {
-    return;
-  }
-  const delta = wheelDeltaToPixels(event.deltaY, event.deltaMode, container.clientWidth);
-  const nextScrollLeft = clampPanelSize(container.scrollLeft + delta, 0, maxScrollLeft);
-  if (nextScrollLeft === container.scrollLeft) {
+  const nextScrollLeft = getVerticalWheelMappedScrollLeft(container, event);
+  if (nextScrollLeft === null) {
     return;
   }
   event.preventDefault();
@@ -58,6 +47,20 @@ export function ImageChatHistoryPanel({
   onPreviewPrompt,
   t,
 }: ImageChatHistoryPanelProps) {
+  const desktopHistoryScrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const container = desktopHistoryScrollRef.current;
+    if (!container) {
+      return;
+    }
+    const handleWheel = (event: WheelEvent) => handleHistoryWheelScroll(event, container);
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      container.removeEventListener("wheel", handleWheel);
+    };
+  }, [variant, historyBranches.length]);
+
   if (variant === "mobileDrawer") {
     return (
       <div className="flex min-h-0 flex-1 flex-col bg-white dark:bg-[#0f1726]">
@@ -117,7 +120,10 @@ export function ImageChatHistoryPanel({
       </div>
 
       {historyBranches.length ? (
-        <div className="image-chat-history-scroll flex min-h-0 flex-1 snap-x snap-mandatory gap-3 overflow-x-auto pb-1" onWheel={handleHistoryWheelScroll}>
+        <div
+          ref={desktopHistoryScrollRef}
+          className="image-chat-history-scroll flex min-h-0 flex-1 gap-3 overflow-x-auto overscroll-x-contain pb-1"
+        >
           {historyBranches.map((branch) => (
             <HistoryBranchStrip
               key={branch.id}

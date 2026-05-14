@@ -10,6 +10,7 @@ import {
   getHistoryPanelMaxHeight,
   getLeftPanelMaxWidth,
   getRightPanelMaxWidth,
+  getVerticalWheelMappedScrollLeft,
   wheelDeltaToPixels,
 } from "./resizableLayout";
 
@@ -84,5 +85,69 @@ describe("image chat resizable layout helpers", () => {
     expect(wheelDeltaToPixels(3, 0, 500)).toBe(3);
     expect(wheelDeltaToPixels(3, 1, 500)).toBe(48);
     expect(wheelDeltaToPixels(1, 2, 500)).toBe(500);
+  });
+
+  it("maps vertical desktop wheel movement into horizontal history scrolling", () => {
+    expect(
+      getVerticalWheelMappedScrollLeft(
+        {
+          scrollLeft: 120,
+          scrollWidth: 900,
+          clientWidth: 300,
+        },
+        {
+          deltaX: 0,
+          deltaY: 100,
+          deltaMode: 0,
+        },
+      ),
+    ).toBe(220);
+
+    expect(
+      getVerticalWheelMappedScrollLeft(
+        {
+          scrollLeft: 580,
+          scrollWidth: 900,
+          clientWidth: 300,
+        },
+        {
+          deltaX: 0,
+          deltaY: 100,
+          deltaMode: 0,
+        },
+      ),
+    ).toBe(600);
+  });
+
+  it("leaves horizontal or non-scrollable wheel gestures to the browser", () => {
+    expect(
+      getVerticalWheelMappedScrollLeft(
+        {
+          scrollLeft: 0,
+          scrollWidth: 300,
+          clientWidth: 300,
+        },
+        {
+          deltaX: 0,
+          deltaY: 100,
+          deltaMode: 0,
+        },
+      ),
+    ).toBeNull();
+
+    expect(
+      getVerticalWheelMappedScrollLeft(
+        {
+          scrollLeft: 100,
+          scrollWidth: 900,
+          clientWidth: 300,
+        },
+        {
+          deltaX: 80,
+          deltaY: 40,
+          deltaMode: 0,
+        },
+      ),
+    ).toBeNull();
   });
 });
