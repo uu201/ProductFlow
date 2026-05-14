@@ -128,7 +128,7 @@ export function WorkflowNodeCard({
         data-node-action
         data-workflow-target-node-id={node.id}
         onClick={onSelect}
-        className="absolute left-[-9px] top-[47px] z-20 h-[18px] w-[18px] rounded-full border border-slate-300 bg-white shadow-sm hover:border-indigo-400 hover:ring-4 hover:ring-indigo-100 dark:border-slate-400/90 dark:bg-[#111b2d] dark:shadow-black/30 dark:hover:border-violet-300 dark:hover:ring-violet-400/20"
+        className="absolute left-[-22px] top-[34px] z-20 h-11 w-11 rounded-full border border-transparent bg-transparent before:absolute before:left-1/2 before:top-1/2 before:h-[18px] before:w-[18px] before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:border before:border-slate-300 before:bg-white before:shadow-sm hover:before:border-indigo-400 hover:before:ring-4 hover:before:ring-indigo-100 dark:before:border-slate-400/90 dark:before:bg-[#111b2d] dark:before:shadow-black/30 dark:hover:before:border-violet-300 dark:hover:before:ring-violet-400/20 lg:left-[-9px] lg:top-[47px] lg:h-[18px] lg:w-[18px]"
         title={t("detail.inputHandle")}
         aria-label={`${displayTitle} ${t("detail.inputHandle")}`}
       />
@@ -139,7 +139,7 @@ export function WorkflowNodeCard({
         onPointerMove={onMoveConnection}
         onPointerUp={onEndConnection}
         onPointerCancel={onEndConnection}
-        className="absolute right-[-10px] top-[46px] z-20 h-5 w-5 rounded-full border-2 border-indigo-500 bg-white shadow-sm hover:bg-indigo-50 hover:ring-4 hover:ring-indigo-100 dark:border-violet-300 dark:bg-[#111b2d] dark:shadow-black/30 dark:hover:bg-violet-500/20 dark:hover:ring-violet-400/25"
+        className="absolute right-[-22px] top-[34px] z-20 h-11 w-11 rounded-full border border-transparent bg-transparent before:absolute before:left-1/2 before:top-1/2 before:h-5 before:w-5 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:border-2 before:border-indigo-500 before:bg-white before:shadow-sm hover:before:bg-indigo-50 hover:before:ring-4 hover:before:ring-indigo-100 dark:before:border-violet-300 dark:before:bg-[#111b2d] dark:before:shadow-black/30 dark:hover:before:bg-violet-500/20 dark:hover:before:ring-violet-400/25 lg:right-[-10px] lg:top-[46px] lg:h-5 lg:w-5"
         title={t("detail.dragOutput")}
         aria-label={`${displayTitle} ${t("detail.outputHandle")}`}
       />
@@ -218,7 +218,7 @@ export function WorkflowNodeCard({
               data-node-action
               onClick={onDelete}
               disabled={busy}
-              className="inline-flex items-center rounded border border-zinc-200 px-2 py-1 text-[11px] font-medium text-red-500 hover:border-red-300 hover:bg-red-50 disabled:opacity-50 dark:border-slate-700 dark:text-red-300 dark:hover:border-red-400/60 dark:hover:bg-red-500/10"
+              className="inline-flex min-h-11 items-center rounded border border-zinc-200 px-3 text-[11px] font-medium text-red-500 hover:border-red-300 hover:bg-red-50 disabled:opacity-50 dark:border-slate-700 dark:text-red-300 dark:hover:border-red-400/60 dark:hover:bg-red-500/10 lg:min-h-0 lg:px-2 lg:py-1"
             >
               <Trash2 size={11} className="mr-1" /> {t("detail.delete")}
             </button>
@@ -227,7 +227,7 @@ export function WorkflowNodeCard({
               data-node-action
               onClick={onRun}
               disabled={runActionState.disabled}
-              className="inline-flex items-center rounded border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 hover:border-zinc-900 hover:text-zinc-900 disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-400 dark:hover:text-white"
+              className="inline-flex min-h-11 items-center rounded border border-zinc-200 px-3 text-[11px] font-medium text-zinc-600 hover:border-zinc-900 hover:text-zinc-900 disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-400 dark:hover:text-white lg:min-h-0 lg:px-2 lg:py-1"
               title={runActionState.title}
               aria-label={`${displayTitle} ${runActionState.label}`}
             >
