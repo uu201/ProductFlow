@@ -705,6 +705,19 @@ def test_provider_config_api_masks_keys_preserves_blank_update_and_validates_bin
     assert profile["has_api_key"] is True
     assert "chatgpt2api" not in str(profile)
 
+    invalid_responses_image_model = client.patch(
+        "/api/settings/provider-bindings/image",
+        json={
+            "provider_kind": "openai_responses",
+            "provider_profile_id": profile_id,
+            "model_settings": {"model": "gpt-image-2"},
+            "config": {"responses_background_enabled": False},
+        },
+    )
+    assert invalid_responses_image_model.status_code == 400
+    assert "gpt-image-*" in invalid_responses_image_model.json()["detail"]
+    assert "Tool" in invalid_responses_image_model.json()["detail"]
+
     updated_blank_key = client.patch(
         f"/api/settings/provider-profiles/{profile_id}",
         json={
@@ -771,7 +784,7 @@ def test_provider_config_api_masks_keys_preserves_blank_update_and_validates_bin
         },
     )
     assert invalid_binding.status_code == 400
-    assert "不支持当前接口能力" in invalid_binding.json()["detail"]
+    assert "gpt-image-*" in invalid_binding.json()["detail"]
 
     missing_text_model = client.patch(
         "/api/settings/provider-bindings/text",

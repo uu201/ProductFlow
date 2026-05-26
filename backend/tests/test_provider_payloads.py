@@ -1638,7 +1638,6 @@ def test_openai_images_provider_factory_and_client_generate_payload(
             "model": "gpt-image-1",
             "prompt": "生成商品图",
             "size": "1024x1024",
-            "n": 1,
             "response_format": "b64_json",
             "quality": "high",
             "style": "vivid",
@@ -1650,11 +1649,78 @@ def test_openai_images_provider_factory_and_client_generate_payload(
         "model": "gpt-image-1",
         "prompt": "生成商品图",
         "size": "1024x1024",
-        "n": 1,
         "quality": "high",
         "style": "vivid",
     }
     assert result.provider_output_json == {}
+
+
+def test_openai_images_client_falls_back_to_raw_http_generate(
+    configured_env: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IMAGE_BASE_URL", "https://image-upstream.example/v1")
+    monkeypatch.setenv("IMAGE_API_KEY", "demo-api-key")
+    monkeypatch.setenv("IMAGE_PROVIDER_KIND", "openai_images")
+    monkeypatch.setenv("IMAGE_GENERATE_MODEL", "gpt-image-2")
+    get_settings.cache_clear()
+
+    sdk_calls: list[dict] = []
+    raw_calls: list[dict] = []
+    encoded_result = _make_demo_image_data_url().split(",", maxsplit=1)[1]
+
+    class FailingImages:
+        def generate(self, **kwargs):
+            sdk_calls.append(kwargs)
+            raise RuntimeError("sdk blocked")
+
+    class DummyOpenAI:
+        def __init__(self, **kwargs) -> None:
+            self.images = FailingImages()
+
+    class DummyHTTPResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {"data": [{"b64_json": encoded_result, "revised_prompt": "raw revised"}]}
+
+    class DummyHTTPClient:
+        def __init__(self, **kwargs) -> None:
+            raw_calls.append({"client_kwargs": kwargs})
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback) -> None:
+            return None
+
+        def post(self, url, *, headers, json):
+            raw_calls.append({"url": url, "headers": headers, "json": json})
+            return DummyHTTPResponse()
+
+    monkeypatch.setattr("productflow_backend.infrastructure.image.images_provider.OpenAI", DummyOpenAI)
+    monkeypatch.setattr("productflow_backend.infrastructure.image.images_provider.httpx.Client", DummyHTTPClient)
+
+    from productflow_backend.infrastructure.image.images_provider import OpenAIImagesClient
+
+    result = OpenAIImagesClient().generate(prompt="raw fallback", size="1024x1024")[0]
+
+    assert len(sdk_calls) == 1
+    assert len(raw_calls) == 2
+    assert raw_calls[1]["url"] == "https://image-upstream.example/v1/images/generations"
+    assert raw_calls[1]["headers"] == {
+        "Authorization": "Bearer demo-api-key",
+        "Content-Type": "application/json",
+    }
+    assert raw_calls[1]["json"] == {
+        "model": "gpt-image-2",
+        "prompt": "raw fallback",
+        "size": "1024x1024",
+        "response_format": "b64_json",
+    }
+    assert result.revised_prompt == "raw revised"
+    assert result.mime_type == "image/png"
 
 
 def test_google_gemini_provider_factory_and_client_generate_payload(
@@ -1859,7 +1925,6 @@ def test_openai_images_client_edit_sends_multiple_images_and_falls_back_to_base_
         "model": "gpt-image-1",
         "prompt": "改图",
         "size": "1024x1024",
-        "n": 1,
         "image_count": 1,
         "images": [{"filename": "base.png", "mime_type": "image/png"}],
         "has_mask": False,

@@ -21,6 +21,7 @@ PROVIDER_TYPES = {PROVIDER_TYPE_OPENAI_COMPATIBLE, PROVIDER_TYPE_GOOGLE_GEMINI}
 TEXT_PROVIDER_KINDS = {"mock", "openai"}
 IMAGE_PROVIDER_KINDS = {"mock", "openai_responses", "openai_images", "google_gemini_image"}
 REAL_IMAGE_PROVIDER_KINDS = IMAGE_PROVIDER_KINDS - {"mock"}
+OPENAI_IMAGE_GENERATION_MODEL_PREFIXES = ("gpt-image",)
 PROVIDER_PURPOSES = {TEXT_PURPOSE, IMAGE_PURPOSE}
 CAPABILITY_TEXT_RESPONSES = "text_responses"
 CAPABILITY_IMAGE_RESPONSES = "image_responses"
@@ -641,6 +642,13 @@ def _validate_binding_runtime_config(
         return
     _require_text_value(model_settings, "model", "图片模型未配置", exc_type=ValueError)
     if provider_kind == "openai_responses":
+        image_model = _optional_str(model_settings.get("model")) or ""
+        if _looks_like_openai_image_generation_model(image_model):
+            raise ValueError(
+                "Responses 鍥剧墖鎺ュ彛鐨勯《灞傛ā鍨嬩笉鑳藉～ gpt-image-*锛涜濉啓 Responses 妯″瀷"
+                "锛堜緥濡?gpt-5.4-mini锛夛紝骞跺湪鍥剧墖宸ュ叿鍙傛暟鐨?Tool 妯″瀷閲屽～ gpt-image-2锛?"
+                "鎴栨敼鐢?OpenAI Images API 鎺ュ彛銆?"
+            )
         _require_bool_value(
             config,
             "responses_background_enabled",
@@ -667,6 +675,11 @@ def _normalize_text_model_settings(model_settings: dict[str, Any]) -> dict[str, 
             normalized[key] = value
 
     return normalized
+
+
+def _looks_like_openai_image_generation_model(value: str) -> bool:
+    normalized = value.strip().lower()
+    return any(normalized.startswith(prefix) for prefix in OPENAI_IMAGE_GENERATION_MODEL_PREFIXES)
 
 
 def _normalize_binding_config(*, purpose: str, provider_kind: str, config: dict[str, Any]) -> dict[str, Any]:

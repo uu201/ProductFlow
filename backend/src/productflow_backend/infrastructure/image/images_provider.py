@@ -11,7 +11,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
+import httpx
 from openai import OpenAI
 
 from productflow_backend.application.contracts import PosterGenerationInput
@@ -47,6 +49,7 @@ MULTI_IMAGE_FALLBACK_NOTE = {
     "message": "供应商不支持多张编辑输入，已仅使用基图完成。",
 }
 IMAGES_API_MAX_N = 10
+IMAGES_API_REQUEST_TIMEOUT_SECONDS = 15 * 60
 
 
 @dataclass(slots=True)
@@ -78,6 +81,12 @@ def _mime_type_from_image_bytes(data: bytes) -> str:
     return "image/png"
 
 
+def _get_response_value(item: Any, key: str) -> Any:
+    if isinstance(item, dict):
+        return item.get(key)
+    return getattr(item, key, None)
+
+
 class OpenAIImagesClient:
     """Thin wrapper around the OpenAI Images API (generations + edits)."""
 
@@ -99,6 +108,27 @@ class OpenAIImagesClient:
             kwargs["base_url"] = self.base_url
         return OpenAI(**kwargs)
 
+    def _images_generations_url(self) -> str:
+        base_url = (self.base_url or "https://api.openai.com/v1").rstrip("/")
+        if base_url.endswith("/images/generations"):
+            return base_url
+        return f"{base_url}/images/generations"
+
+    def _raw_generate(self, request_params: dict[str, Any]) -> dict[str, Any]:
+        if not self.api_key:
+            raise RuntimeError("鍥剧墖渚涘簲鍟嗘。妗堢己灏?API Key")
+        with httpx.Client(timeout=IMAGES_API_REQUEST_TIMEOUT_SECONDS) as client:
+            response = client.post(
+                self._images_generations_url(),
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=request_params,
+            )
+            response.raise_for_status()
+            return response.json()
+
     def _parse_response(
         self,
         response: Any,
@@ -110,8 +140,9 @@ class OpenAIImagesClient:
     ) -> list[ImagesAPIResult]:
         results: list[ImagesAPIResult] = []
         now = datetime.now(UTC)
-        for item in getattr(response, "data", []) or []:
-            b64 = getattr(item, "b64_json", None)
+        response_data = response.get("data", []) if isinstance(response, dict) else getattr(response, "data", [])
+        for item in response_data or []:
+            b64 = _get_response_value(item, "b64_json")
             if not b64:
                 continue
             image_bytes = decode_b64_image(b64)
@@ -122,7 +153,7 @@ class OpenAIImagesClient:
                     model_name=model,
                     size=size,
                     generated_at=now,
-                    revised_prompt=getattr(item, "revised_prompt", None),
+                    revised_prompt=_get_response_value(item, "revised_prompt"),
                     provider_request_json=provider_request_json,
                     provider_output_json=provider_output_json or {},
                 )
@@ -155,6 +186,89 @@ class OpenAIImagesClient:
     def _should_retry_without_optional_fields(self, request_params: dict[str, Any]) -> bool:
         return any(key in request_params for key in ("quality", "style"))
 
+    def _add_images_api_count(self, request_params: dict[str, Any], n: int) -> None:
+        if n != 1:
+            request_params["n"] = n
+
+    def _safe_base_url(self) -> str | None:
+        if not self.base_url:
+            return None
+        split = urlsplit(self.base_url)
+        if split.username or split.password:
+            hostname = split.hostname or ""
+            netloc = hostname
+            if split.port is not None:
+                netloc = f"{netloc}:{split.port}"
+            return urlunsplit((split.scheme, netloc, split.path, "", ""))
+        return urlunsplit((split.scheme, split.netloc, split.path, "", ""))
+
+    def _request_diagnostic_fields(self, request_params: dict[str, Any]) -> dict[str, Any]:
+        image_value = request_params.get("image")
+        if isinstance(image_value, list):
+            image_count = len(image_value)
+        elif image_value is None:
+            image_count = None
+        else:
+            image_count = 1
+        return {
+            "model": request_params.get("model") or self.model,
+            "base_url": self._safe_base_url(),
+            "size": request_params.get("size"),
+            "n": request_params.get("n"),
+            "prompt_length": len(str(request_params.get("prompt") or "")),
+            "has_optional_fields": self._should_retry_without_optional_fields(request_params),
+            "image_count": image_count,
+            "has_mask": request_params.get("mask") is not None,
+        }
+
+    def _log_provider_request(self, message: str, *, phase: str, request_params: dict[str, Any]) -> None:
+        fields = self._request_diagnostic_fields(request_params)
+        logger.info(
+            (
+                "%s: phase=%s model=%s base_url=%s size=%s n=%s "
+                "prompt_length=%s has_optional_fields=%s image_count=%s has_mask=%s"
+            ),
+            message,
+            phase,
+            fields["model"],
+            fields["base_url"],
+            fields["size"],
+            fields["n"],
+            fields["prompt_length"],
+            fields["has_optional_fields"],
+            fields["image_count"],
+            fields["has_mask"],
+        )
+
+    def _log_provider_exception(
+        self,
+        message: str,
+        *,
+        exc: Exception,
+        phase: str,
+        request_params: dict[str, Any],
+        level: int = logging.WARNING,
+    ) -> None:
+        fields = self._request_diagnostic_fields(request_params)
+        logger.log(
+            level,
+            (
+                "%s: phase=%s model=%s base_url=%s size=%s n=%s "
+                "prompt_length=%s has_optional_fields=%s image_count=%s has_mask=%s exception_class=%s"
+            ),
+            message,
+            phase,
+            fields["model"],
+            fields["base_url"],
+            fields["size"],
+            fields["n"],
+            fields["prompt_length"],
+            fields["has_optional_fields"],
+            fields["image_count"],
+            fields["has_mask"],
+            type(exc).__name__,
+        )
+
     def generate(
         self,
         *,
@@ -174,22 +288,51 @@ class OpenAIImagesClient:
             "model": req_model,
             "prompt": prompt,
             "size": size,
-            "n": n,
             "response_format": "b64_json",
         }
+        self._add_images_api_count(request_params, n)
         if req_quality:
             request_params["quality"] = req_quality
         if req_style:
             request_params["style"] = req_style
 
+        self._log_provider_request("OpenAI Images API 请求", phase="generate", request_params=request_params)
         fallback_used = False
         try:
             response = client.images.generate(**request_params)
         except Exception as exc:  # noqa: BLE001
             if not self._should_retry_without_optional_fields(request_params):
-                logger.error("OpenAI Images API generate 失败: %s", exc, exc_info=True)
-                raise RuntimeError(PROVIDER_REQUEST_FAILURE_MESSAGE) from exc
+                self._log_provider_exception(
+                    "OpenAI Images API generate 失败",
+                    exc=exc,
+                    phase="generate",
+                    request_params=request_params,
+                )
+                try:
+                    response = self._raw_generate(request_params)
+                    return self._parse_response(
+                        response,
+                        model=req_model,
+                        size=size,
+                        provider_request_json={k: v for k, v in request_params.items() if k != "response_format"},
+                        provider_output_json=self._with_productflow_metadata(None, notes=[]),
+                    )
+                except Exception as raw_exc:  # noqa: BLE001
+                    self._log_provider_exception(
+                        "OpenAI Images API generate raw HTTP 澶辫触",
+                        exc=raw_exc,
+                        phase="generate_raw",
+                        request_params=request_params,
+                    )
+                    raise RuntimeError(PROVIDER_REQUEST_FAILURE_MESSAGE) from raw_exc
             fallback_used = True
+            self._log_provider_exception(
+                "OpenAI Images API generate 拒绝可选参数，回退基础参数",
+                exc=exc,
+                phase="generate_optional_fallback",
+                request_params=request_params,
+                level=logging.INFO,
+            )
             fallback_params = {
                 key: value for key, value in request_params.items() if key not in {"quality", "style"}
             }
@@ -197,8 +340,33 @@ class OpenAIImagesClient:
                 response = client.images.generate(**fallback_params)
                 request_params = fallback_params
             except Exception as fallback_exc:  # noqa: BLE001
-                logger.error("OpenAI Images API generate 失败: %s", fallback_exc, exc_info=True)
-                raise RuntimeError(PROVIDER_REQUEST_FAILURE_MESSAGE) from fallback_exc
+                self._log_provider_exception(
+                    "OpenAI Images API generate 失败",
+                    exc=fallback_exc,
+                    phase="generate_fallback",
+                    request_params=fallback_params,
+                )
+                try:
+                    response = self._raw_generate(fallback_params)
+                    request_params = fallback_params
+                    return self._parse_response(
+                        response,
+                        model=req_model,
+                        size=size,
+                        provider_request_json={k: v for k, v in request_params.items() if k != "response_format"},
+                        provider_output_json=self._with_productflow_metadata(
+                            None,
+                            notes=[OPTIONAL_FIELDS_FALLBACK_NOTE],
+                        ),
+                    )
+                except Exception as raw_exc:  # noqa: BLE001
+                    self._log_provider_exception(
+                        "OpenAI Images API generate raw HTTP 澶辫触",
+                        exc=raw_exc,
+                        phase="generate_fallback_raw",
+                        request_params=fallback_params,
+                    )
+                    raise RuntimeError(PROVIDER_REQUEST_FAILURE_MESSAGE) from raw_exc
 
         provider_output_json = self._with_productflow_metadata(
             None,
@@ -234,9 +402,9 @@ class OpenAIImagesClient:
             "image": image_files[0] if len(image_files) == 1 else image_files,
             "prompt": prompt,
             "size": size,
-            "n": n,
             "response_format": "b64_json",
         }
+        self._add_images_api_count(request_params, n)
         if req_quality:
             request_params["quality"] = req_quality
         if mask is not None:
@@ -250,6 +418,7 @@ class OpenAIImagesClient:
             image_metadata=image_metadata,
             has_mask=mask is not None,
         )
+        self._log_provider_request("OpenAI Images API 请求", phase="edit", request_params=request_params)
 
         fallback_notes: list[dict[str, Any]] = []
         requested_image_count = len(image_files)
@@ -261,7 +430,12 @@ class OpenAIImagesClient:
             can_reduce_optional = self._should_retry_without_optional_fields(fallback_params)
             can_reduce_images = len(image_files) > 1
             if not can_reduce_optional and not can_reduce_images:
-                logger.error("OpenAI Images API edit 失败: %s", exc, exc_info=True)
+                self._log_provider_exception(
+                    "OpenAI Images API edit 失败",
+                    exc=exc,
+                    phase="edit",
+                    request_params=request_params,
+                )
                 raise RuntimeError(PROVIDER_REQUEST_FAILURE_MESSAGE) from exc
             if can_reduce_optional:
                 fallback_params = {
@@ -272,6 +446,13 @@ class OpenAIImagesClient:
                 fallback_params["image"] = image_files[0]
                 effective_image_count = 1
                 fallback_notes.append(MULTI_IMAGE_FALLBACK_NOTE)
+            self._log_provider_exception(
+                "OpenAI Images API edit 回退基础参数",
+                exc=exc,
+                phase="edit_fallback",
+                request_params=fallback_params,
+                level=logging.INFO,
+            )
             try:
                 response = client.images.edit(**fallback_params)
                 request_params = fallback_params
@@ -282,7 +463,12 @@ class OpenAIImagesClient:
                     has_mask=mask is not None,
                 )
             except Exception as fallback_exc:  # noqa: BLE001
-                logger.error("OpenAI Images API edit 失败: %s", fallback_exc, exc_info=True)
+                self._log_provider_exception(
+                    "OpenAI Images API edit 失败",
+                    exc=fallback_exc,
+                    phase="edit_fallback",
+                    request_params=fallback_params,
+                )
                 raise RuntimeError(PROVIDER_REQUEST_FAILURE_MESSAGE) from fallback_exc
 
         provider_output_json = self._with_productflow_metadata(
